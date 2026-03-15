@@ -1,0 +1,12 @@
+#!/bin/bash
+# Brewfile hash: {{ include "dot_Brewfile" | sha256sum }}
+
+set -e
+
+if ! command -v brew &> /dev/null; then
+    echo "Homebrew not installed, skipping brew bundle"
+    exit 0
+fi
+
+echo "Installing/updating Homebrew packages from ~/.Brewfile..."
+brew bundle --file="$HOME/.Brewfile"
