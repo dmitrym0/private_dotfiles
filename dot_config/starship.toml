@@ -1,0 +1,39 @@
+format = "$battery$all"
+command_timeout = 1000
+
+[c]
+disabled = true
+
+[battery]
+full_symbol = '🔋 '
+charging_symbol = '⚡️ '
+discharging_symbol = '💀 '
+disabled = false
+
+[[battery.display]]
+threshold = 100
+style = "bold green"
+
+
+[memory_usage]
+format = "$symbol[${ram}( | ${swap})]($style) "
+threshold = 70
+style = "bold dimmed white"
+disabled = false
+
+
+[hostname]
+ssh_only = true
+format = "[$hostname]($style)"
+trim_at = "-"
+style = "bold dimmed white"
+disabled = false
+
+
+[status]
+style = 'bg:blue'
+symbol = '🔴'
+success_symbol = '🟢'
+format = '[\[$symbol$common_meaning$signal_name$maybe_int\]]($style) '
+map_symbol = true
+disabled = false
