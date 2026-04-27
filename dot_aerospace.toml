@@ -71,8 +71,8 @@ automatically-unhide-macos-hidden-apps = false
     inner.vertical =   6
     outer.left =       6
     outer.bottom =     6
-    outer.top =        8  
-    #outer.top =       42
+    #outer.top =        8  
+    outer.top =       42
     outer.right =      6
 
 # 'main' binding mode declaration
@@ -220,6 +220,8 @@ automatically-unhide-macos-hidden-apps = false
     cmd-shift-alt-ctrl-b = ['balance-sizes', 'flatten-workspace-tree', '''exec-and-forget ~/bin/hs_message "Balance windows" ''']
     cmd-shift-alt-ctrl-i = ['''exec-and-forget ~/bin/hs_message "🍅Add Time "; /opt/homebrew/bin/emacsclient -n -e '(org-pomodoro-third-time-increment)' ''']
     cmd-shift-alt-ctrl-l = ['''exec-and-forget ~/bin/hs_message "🍅Restart pomodoro"; /opt/homebrew/bin/emacsclient -n -e "(org-pomodoro-restart)" ''']
+
+    #cmd-shift-alt-ctrl-g = ['''exec-and-forget ~/bin/hs_message "term"; kitten quick-access-terminal''']
 
     cmd-shift-alt-ctrl-w = ['''exec-and-forget ~/bin/hs_message "Emacs Everywhere" ''', '''exec-and-forget /opt/homebrew/bin/emacsclient --eval "(emacs-everywhere)"''']
 
