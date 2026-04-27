@@ -1,0 +1,42 @@
+# This is Git's per-user configuration file.
+[user]
+# Please adapt and uncomment the following lines:
+  name = Dmitry M
+  email = dmitrym@gmail.com
+[github]
+  user = dmitrym0
+[alias]
+  mylog = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit
+  ml = log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit
+  mychangelog = log --no-color --pretty=format:'%Cred%h%Creset - %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit
+  fza = "!git ls-files -m -o --exclude-standard | fzf -m --print0 | xargs -0 git add"
+[pull]
+  ff = only
+
+[merge]
+  tool = meld
+  conflictstyle = diff3
+
+[diff]
+  #tool = meld
+  colorMoved = default
+
+
+[difftool "meld"]
+  trustExitCode = true
+  cmd = open -W -a Meld --args \"$LOCAL\" \"$REMOTE\"
+
+
+[mergetool "meld"]
+  trustExitCode = true
+  cmd = open -W -a Meld --args --auto-merge \"$LOCAL\" \"$BASE\" \"$REMOTE\" --output=\"$MERGED\"
+[branch]
+	sort = committerdate
+
+
+[core]
+    pager = delta
+	insteadOf = https://github.com
+
+[url "git@github.com:"]
+	insteadOf = https://github.com/
