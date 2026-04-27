@@ -1,0 +1,1 @@
+ps auxw|fzf --reverse -m -e -i  |sed -E 's/[[:blank:]]+/ /' |  cut -d " " -f2  | xargs kill -9 2>/dev/null
