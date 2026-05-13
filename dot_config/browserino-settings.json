@@ -1,0 +1,9 @@
+{
+  "shortcuts" : "{\"com.apple.Safari\":\"S\",\"com.brave.Browser\":\"B\"}",
+  "hiddenBrowsers" : "[]",
+  "ACDMonthlyAnalyticsLastPosted" : 798760145.51100802,
+  "SLSMenuBarUseBlurredAppearance" : true,
+  "browsers" : "[\"file:\\\/\\\/\\\/System\\\/Volumes\\\/Preboot\\\/Cryptexes\\\/App\\\/System\\\/Applications\\\/Safari.app\\\/\",\"file:\\\/\\\/\\\/Applications\\\/Brave%20Browser.app\\\/\",\"file:\\\/\\\/\\\/Applications\\\/Google%20Chrome.app\\\/\"]",
+  "directories" : "[{\"directoryPath\":\"\\\/Applications\"}]",
+  "rules" : "[{\"regex\":\"https:\\\/\\\/github.com\\\/varsitytutors\\\/.*\",\"app\":\"file:\\\/\\\/\\\/Applications\\\/Brave%20Browser.app\\\/\"},{\"regex\":\"https:\\\/\\\/varsity.atlassian.net\\\/.*\",\"app\":\"file:\\\/\\\/\\\/Applications\\\/Brave%20Browser.app\\\/\"},{\"regex\":\"vtstaging.com\",\"app\":\"file:\\\/\\\/\\\/Applications\\\/Brave%20Browser.app\\\/\"},{\"regex\":\"newrelic.com\",\"app\":\"file:\\\/\\\/\\\/Applications\\\/Brave%20Browser.app\\\/\"},{\"regex\":\"meet.google.com\",\"app\":\"file:\\\/\\\/\\\/Applications\\\/Brave%20Browser.app\\\/\"}]"
+}
