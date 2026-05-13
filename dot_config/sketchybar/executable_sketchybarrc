@@ -14,9 +14,9 @@ PLUGIN_DIR="$HOME/.config/sketchybar/plugins"
 sketchybar --bar height=32        \
                  blur_radius=50   \
                  position=top     \
+                 notch_width=200  \
                  padding_left=10  \
                  padding_right=20 \
-		 padding_top=0 \
                  color=0x15ffffff
 
 ##### Changing Defaults #####
@@ -96,12 +96,12 @@ sketchybar --add item space_separator left                            \
 sketchybar --add item clock right                        \
            --set clock   update_freq=10                  \
                          script="$PLUGIN_DIR/clock.sh"   \
-           --add alias "Itsycal,ItsycalStatusItem" right \
-           --set "Itsycal,ItsycalStatusItem" click_script="osascript -e 'tell application \"System Events\" to tell process \"Itsycal\" to perform action \"AXPress\" of menu bar item 1 of menu bar 2'" \
+           --add alias "Control Center,ItsycalStatusItem" right \
+           --set "Control Center,ItsycalStatusItem" click_script="osascript -e 'tell application \"System Events\" to tell process \"Itsycal\" to perform action \"AXPress\" of menu bar item 1 of menu bar 2'" \
            --add item battery right                      \
            --set battery script="NAME=battery $PLUGIN_DIR/battery.sh" \
-           --add alias "iStat Menus Status,com.bjango.istatmenus.network" right \
-           --add alias "iStat Menus Status,com.bjango.istatmenus.cpu" right \
+           --add alias "Control Center,com.bjango.istatmenus.network" right \
+           --add alias "Control Center,com.bjango.istatmenus.cpu" right \
            --subscribe battery system_woke \
            --subscribe battery space_change
 
@@ -114,12 +114,6 @@ sketchybar --add item clock right                        \
 
 
 
-sketchybar -m --add item yabai_mode left \
-              --set yabai_mode update_freq=3 \
-              --set yabai_mode script="~/.config/sketchybar/plugins/yabai_mode.sh" \
-              --set yabai_mode click_script="~/.config/sketchybar/plugins/yabai_mode_click.sh" \
-              --subscribe yabai_mode space_change
-
 #sketchybar -m                \
 #--add item sound right     \
 #--set sound                \
@@ -127,9 +121,6 @@ sketchybar -m --add item yabai_mode left \
 #icon.color=0xffd08770      \
 #script="~/.config/sketchybar/plugins/sound.sh"
 
-sketchybar -m --add item org-pomodoro right \
-              --set org-pomodoro update_freq=2 \
-              --set org-pomodoro script="~/.config/sketchybar/plugins/org-clock.2s.sh"
 
 #sketchybar -m --add item latency right \
 #              --set latency  update_freq=2 \
@@ -137,7 +128,7 @@ sketchybar -m --add item org-pomodoro right \
 
 
 
-sketchybar --add item fitness right \
+sketchybar --add item fitness q \
            --set fitness update_freq=7200 \
                          icon="🏋️" \
                          script="$PLUGIN_DIR/fitness.sh" \
@@ -147,7 +138,7 @@ sketchybar --add item fitness right \
                          popup.background.border_color=0xff444444 \
                          popup.background.border_width=1
 
-sketchybar --add item meditate right \
+sketchybar --add item meditate q \
            --set meditate update_freq=7200 \
                          icon="🧘‍♂️" \
                          script="$PLUGIN_DIR/meditate.sh" \
@@ -157,7 +148,12 @@ sketchybar --add item meditate right \
                          popup.background.border_color=0xff444444 \
                          popup.background.border_width=1
 
-sketchybar --add bracket health fitness meditate \
+sketchybar --add item fpv q \
+           --set fpv update_freq=7200 \
+                     icon="🚁" \
+                     script="$PLUGIN_DIR/fpv.sh"
+
+sketchybar --add bracket health fitness meditate fpv \
            --set health background.color=0x33ffffff \
                         background.corner_radius=5 \
                         background.height=22
@@ -166,8 +162,8 @@ sketchybar --add alias 'QuickRecorder,Item-0' right \
            --set 'QuickRecorder,Item-0' update_freq=10 \
                  script="$PLUGIN_DIR/quickrecorder.sh"
 
-sketchybar --add alias "PingBar,Item-0" right \
-           --set "PingBar,Item-0" click_script="osascript -e 'tell application \"System Events\" to tell process \"PingBar\" to perform action \"AXPress\" of menu bar item 1 of menu bar 1'"
+sketchybar --add alias "Control Center,com.example.PingBar" q \
+           --set "PingBar" click_script="osascript -e 'tell application \"System Events\" to tell process \"PingBar\" to perform action \"AXPress\" of menu bar item 1 of menu bar 1'"
 
 sketchybar --add item meeting left \
            --set meeting icon="📹" \

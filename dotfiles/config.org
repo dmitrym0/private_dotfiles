@@ -1,0 +1,3887 @@
+;; -*- eval: (git-auto-commit-mode 1) -*-
+
+:PROPERTIES:
+:ID:       1859DDBD-1924-4A25-910F-4DBD4965B8CB
+:END:
+#+TITLE: DotConfig
+
+
+* Intro
+
+My emacs init file.
+
+Gets tangled by =~/.emacs=
+
+
+** Don't forget
+
+- ~C-c C-,~ invokes Emacs templating system.
+
+
+** Still needs doing:
+
+- Change highlight color. Selecting with a mouse or ~C-SPC~ I can't see the highlight.
+
+
+
+
+* Header
+
+#+begin_src elisp
+;;; config.el --- DESCRIPTION -*- no-byte-compile: t; lexical-binding: t; -*-
+#+end_src
+
+
+
+* [[https://github.com/dholm/benchmark-init-el][benchmark-init:]] enable benchmarking during intit
+
+
+To [[https://github.com/dholm/benchmark-init-el?tab=readme-ov-file#usage][show the data:]]
+
+=benchmark-init/show-durations-tabulated=
+
+
+#+begin_src elisp
+  (setq use-package-always-defer t)
+
+  ;; (use-package benchmark-init
+  ;;   :ensure t
+  ;;   :demand t
+  ;;   :config
+  ;;   (benchmark-init/activate)
+  ;;   ;; To disable collection of benchmark data after init is done.
+  ;;   (add-hook 'after-init-hook 'benchmark-init/deactivate))
+#+end_src
+
+* Garbage collection hack
+
+[[https://github.com/emacsmirror/gcmh][Garbage collection magic hack]]
+
+#+begin_quote
+Enforce a sneaky Garbage Collection strategy to minimize GC interference with user activity.
+During normal use a high GC threshold is set.
+When idling GC is triggered and a low threshold is set.
+#+end_quote
+
+* gc-maybe
+
+#+begin_quote
+All gc-maybe-mode does is this:
+
+- with a predefined idle timer (default is 5 seconds), call garbage-collect-maybe (from Emacs 28.1 or above) with a factor based on the current gc-cons-percentage, so it garbage collects if needed;
+- add hooks to the minibuffer-setup-hook (raising the GC threshold), minibuffer-exit-hook (restoring the GC threshold), and the post-gc-hook (for optional stats in a buffer);
+
+#+end_quote
+
+#+begin_src elisp
+  (use-package gc-maybe
+    :straight (:repo "bcardoso/gc-maybe"
+                     :host github
+                     :type git)
+    :init
+    (setopt gc-maybe-threshold-default (* 48 1024 1024)) ; 48 MiB
+    (setopt gc-maybe-percentage-default 0.2)
+    ;;(gc-maybe-mode +0) ; set minibuffer hooks and idle timer
+    :config
+    ;; optionally log GCs in a buffer
+    (setopt gc-maybe-log-stats t)
+    ;; example function advice
+    (setopt gc-maybe-idle-delay 1800)
+    (advice-add 'save-buffers-kill-emacs :before #'gc-maybe-raise-threshold))
+
+#+end_src
+
+
+* Native Compilation
+
+Modern Emacs (28+) can compile Elisp to native machine code using libgccjit for 2-5x performance gains.
+
+Native compilation converts bytecode (.elc) to native machine code (.eln files stored in eln-cache/).
+This happens asynchronously in the background on first load, then subsequent startups use the fast native code.
+
+To check if native-comp is working:
+- ~M-: (native-comp-available-p)~ should return ~t~
+- Check ~*Async-native-compile-log*~ buffer during first startup
+- View cache: =~/.emacs.d/eln-cache/=
+
+#+begin_src elisp
+  (when (and (fboundp 'native-comp-available-p)
+             (native-comp-available-p))
+    (message "Native compilation is available")
+
+    ;; Silence compiler warnings during async compilation
+    ;; These warnings are often about deprecated packages and create noise
+    (setq native-comp-async-report-warnings-errors nil)
+
+    ;; Compile loaded .elc files asynchronously in background
+    ;; This means first startup compiles, subsequent ones are fast
+    (setq native-comp-deferred-compilation t)
+
+    ;; Set compilation parallelism (0 = auto-detect CPU cores)
+    ;; Lower this (e.g., 2) if compilation pegs your CPU
+    (setq native-comp-async-jobs-number 0)
+
+    ;; Make straight.el use native compilation for installed packages
+    (setq straight-native-compile t))
+
+  ;; Helper function to check native-comp status
+  (defun dm/native-comp-status ()
+    "Show native compilation queue status."
+    (interactive)
+    (if (native-comp-available-p)
+        (let ((queue-length (length (native-comp-async-jobs))))
+          (message "Native-comp: %d files in compilation queue. Check *Async-native-compile-log* buffer"
+                   queue-length))
+      (message "Native compilation not available in this Emacs build")))
+
+  ;; Show startup statistics including native-comp
+  (add-hook 'emacs-startup-hook
+            (lambda ()
+              (when (native-comp-available-p)
+                (let ((native-count 0))
+                  (mapatoms
+                   (lambda (sym)
+                     (when (and (fboundp sym)
+                                (subr-native-elisp-p (symbol-function sym)))
+                       (setq native-count (1+ native-count)))))
+                  (message "Emacs started with %d native-compiled functions" native-count)))))
+#+end_src
+
+
+* Includes
+
+Attempt to refactor this file a bit.
+
+#+begin_src emacs-lisp
+  (message "Loading startup")
+  (org-babel-load-file "~/dotfiles/modules/startup.org")
+  (message "Loading Utils")
+  (org-babel-load-file "~/dotfiles/modules/utils.org")
+#+end_src
+
+
+Emacs Nursery; stuff that I'm working on.
+
+#+begin_src elisp
+   (message "Loading nursery items")
+   (use-package dm-dueapp-integration :straight (:type git :local-repo "~/workspace/emacs-nursery" :no-build t :no-install t))
+   (use-package dm-org-agenda :straight (:type git :local-repo "~/workspace/emacs-nursery" :no-build t :no-install t) :demand t)
+   (use-package dm-pomodoro-nag :straight (:type git :local-repo "~/workspace/emacs-nursery" :no-build t :no-install t))
+   (use-package favurls :straight ( :type git :local-repo "~/workspace/emacs-nursery" :no-build t :no-install t) :demand t)
+   (use-package dm-mcp-tools :straight ( :type git :local-repo "~/workspace/emacs-nursery" :no-build t :no-install t) :after (gptel) :demand t)
+   (use-package dm-shutdown :straight ( :type git :local-repo "~/workspace/emacs-nursery" :no-build t :no-install t) :after (gptel) :demand t)
+
+
+  (use-package dm-mcp-tools
+     :ensure nil
+     :load-path "~/workspace/emacs-nursery/"   ;; or the subdir that contains dm-mcp-tools.el
+     :after (:all gptel)
+     :demand t)
+
+   (use-package dm-org-journal-in-current-buffer :straight (:type git :local-repo "~/workspace/emacs-nursery" :no-build t :no-install t))
+   (use-package dm-jira :after embark
+     :straight (:type git :local-repo "~/workspace/emacs-nursery" :no-build t :no-install t) :demand t)
+   (use-package dm-tools
+     :straight (:type git :local-repo "~/workspace/emacs-nursery" :no-build t :no-install t) :demand t)
+
+   (use-package quake-frame
+     :straight (:type git :host nil :repo "https://codeberg.org/ctietze/quake-frame.el"))
+
+
+;;  (use-package chronotrack
+ ;;;;    :straight (:type git :local-repo "~/workspace/ct-el" :no-build t :no-install t)
+   ;;  :after quake-frame
+    ;; :demand t)
+
+
+   (use-package dm-quake-chronotrack
+     :straight (:type git :local-repo "~/workspace/emacs-nursery" :no-build t :no-install t)
+     :after quake-frame
+     :demand t)
+
+   (load-file "~/workspace/emacs-nursery/dm-unexpected-task.el")
+   (load-file "~/workspace/emacs-nursery/dm-dueapp-integration.el")
+   (load-file "~/workspace/emacs-nursery/dm-org-roam.el")
+#+end_src
+
+
+
+#+begin_src elisp
+   (use-package org-hyperscheduler
+     :config
+     (org-hs--log-set-level 'debug)
+     (setq org-hyperscheduler-readonly-mode nil)
+     (setq org-hyperscheduler-exclude-from-org-roam t)
+     :bind (("C-c d t" . org-hyperscheduler-open))
+     :straight (:local-repo "~/workspace/org-hyperscheduler" :type git :no-build t :no-install t))
+   (message "Done with hyperscheduler")
+#+end_src
+
+
+* Init
+
+When something weird happens and you hammer ~C-g~ or kill with ~USR2~ try to get a trace to see what's going on.
+
+Keywords: errors
+#+begin_src elisp
+  ;; (toggle-debug-on-quit)
+#+end_src
+
+Soft wrap lines (wrap around past screen boundary)
+
+#+begin_src emacs-lisp
+(message "Basic init")
+;(global-visual-line-mode 1)
+;; show where the newline starts in visual line mode
+(setq visual-line-fringe-indicators '(left-curly-arrow right-curly-arrow))
+(show-paren-mode 1)
+(setq show-paren-delay 0)
+(winner-mode 1)
+(setq mac-option-modifier 'meta)
+
+(add-hook 'text-mode-hook 'visual-line-mode)
+
+;; save all org buffers
+;; this is very slow. disable for now?
+;; (add-hook 'auto-save-hook 'org-save-all-org-buffers)
+#+end_src
+
+
+Weeks start on mondays.
+#+begin_src elisp
+(setq-default calendar-week-start-day 1)
+#+end_src
+
+I never want whitespace at the end of lines. Remove it on save.
+#+begin_src elisp
+(add-hook 'before-save-hook 'delete-trailing-whitespace)
+#+end_src
+
+Highlight current line
+#+begin_src emacs-lisp
+  (defface dm/hl-line-face
+    '((default :extend t)
+      (((class color) (min-colors 88) (background light))
+       :background "#fff29a")
+      (((class color) (min-colors 88) (background dark))
+       :background "#513a3a")
+      (t :inverse-video t))
+    "Alternative yellow face for `pulsar-face'."
+    :group 'pulsar-faces)
+
+  (setq hl-line-face 'dm/hl-line-face)
+
+  (global-hl-line-mode t)
+
+
+
+#+end_src
+
+use-package debugging and statistics
+
+To see package load times and troubleshoot slow startup:
+
+1. Keep ~use-package-compute-statistics~ enabled (already set below)
+2. After Emacs fully loads, run: ~M-x use-package-report~
+3. Sort by load time to find slow packages
+4. For detailed logging during startup, temporarily set ~use-package-verbose~ to ~t~
+
+#+begin_src emacs-lisp
+  (fset 'yes-or-no-p 'y-or-n-p)
+
+  ;; Collect statistics on package load times
+  ;; View with: M-x use-package-report
+  (setq use-package-compute-statistics t)
+
+  ;; Set to t to see detailed loading messages in *Messages* buffer
+  ;; Useful for debugging slow startup - generates lots of output
+  (setq use-package-verbose nil)
+
+  (setq use-package-always-ensure t) ;; ensure that packages are installed if not present
+#+end_src
+
+Helper function to quickly view package load times:
+
+#+begin_src emacs-lisp
+  (defun dm/show-package-load-times ()
+    "Open use-package-report to show package load times.
+  Packages are sorted by total load time."
+    (interactive)
+    (if use-package-compute-statistics
+        (use-package-report)
+      (message "use-package-compute-statistics is not enabled. Set it to t and restart Emacs.")))
+#+end_src
+
+
+Store autosaves elsewhere, borrowed from [[https://github.com/larstvei/dot-emacs][here]]
+#+begin_src emacs-lisp
+  (defvar emacs-autosave-directory
+    (concat user-emacs-directory "autosaves/")
+    "This variable dictates where to put auto saves. It is set to a
+    directory called autosaves located wherever your .emacs.d/ is
+    located.")
+
+  ;; Sets all files to be backed up and auto saved in a single directory.
+  (setq backup-directory-alist
+        `((".*" . ,emacs-autosave-directory))
+        auto-save-file-name-transforms
+        `((".*" ,emacs-autosave-directory t)))
+#+end_src
+
+
+Turn on variable syntax highlighting
+#+begin_src emacs-lisp
+  (use-package color-identifiers-mode )
+  ;; Disabled: suspected memory leak via interval/overlay accumulation per buffer
+  ;; (add-hook 'after-init-hook 'global-color-identifiers-mode)
+#+end_src
+
+No startup message
+#+begin_src emacs-lisp
+  (setq inhibit-startup-message t)
+#+end_src
+
+Disable lockfiles
+#+begin_src emacs-lisp
+  (setq create-lockfiles nil)
+#+end_src
+
+
+Show column numbers in the mode line
+#+begin_src emacs-lisp
+  (column-number-mode)
+#+end_src
+
+#+begin_src elisp
+  (global-display-line-numbers-mode nil)
+
+  ;; Disable line numbers for some modes
+  (dolist (mode '(org-mode-hook
+                  term-mode-hook
+                  shell-mode-hook
+                  treemacs-mode-hook
+                  eshell-mode-hook
+                  pdf-view-mode-hook))
+    (add-hook mode (lambda ()
+                     (message "Disabling line numbers mode.")
+                     (display-line-numbers-mode 0))))
+#+end_src
+
+Show trailing whitespaces, kinda makes emacs ugly.
+#+begin_src emacs-lisp
+  (setq-default show-trailing-whitespace t)
+  (setq-default indicate-empty-lines t)
+#+end_src
+
+No tabs!
+#+begin_src emacs-lisp
+(message "No tabs")
+(setq-default indent-tabs-mode nil)
+#+end_src
+
+
+Highlight everything between two exclamation marks (!highlighted!)
+#+begin_src emacs-lisp
+    ;; (defun org-add-my-extra-markup ()
+    ;;   "Add highlight emphasis."
+    ;;   (add-to-list 'org-font-lock-extra-keywords
+    ;;                '("[^\\w]\\(:\\[^\n\r\t]+:\\)[^\\w]"
+    ;;                  (1 '(face highlight invisible nil)))))
+    ;; (add-hook 'org-font-lock-set-keywords-hook #'org-add-my-extra-markup)
+
+
+
+    ;; ;; (defun my-html-mark-tag (text backend info)
+    ;; ;; "Transcode :blah: into <mark>blah</mark> in body text."
+    ;; ;; (when (org-export-derived-backend-p backend 'html)
+    ;; ;;   (let ((text (replace-regexp-in-string "[^\\w]\\(:\\)[^\n\t\r]+\\(:\\)[^\\w]" "<mark>"  text nil nil 1 nil)))
+    ;; ;;     (replace-regexp-in-string "[^\\w]\\(<mark>\\)[^\n\t\r]+\\(:\\)[^\\w]" "</mark>" text nil nil 2 nil))))
+
+ ; (add-to-list 'org-export-filter-plain-text-functions 'my-html-mark-tag) ;
+#+end_src
+
+
+Enable wakatime
+#+begin_src elisp
+  (global-wakatime-mode)
+#+end_src
+
+
+Use doom modeline
+#+begin_src emacs-lisp
+  (message "Enable doom modeline")
+  (use-package nerd-icons :demand t)
+  (use-package doom-modeline :demand t
+    :after nerd-icons
+    :diminish
+    :config (doom-modeline-mode 1)
+    ;; Whether to use hud instead of default bar. It's only respected in GUI.
+    (setq doom-modeline-hud nil)
+    (winner-mode 1))
+#+end_src
+
+
+When splitting frames, do it nicely.
+#+begin_src emacs-lisp
+  (use-package golden-ratio
+    :diminish golden-ratio-mode
+    :init (golden-ratio-mode 1))
+#+end_src
+
+No toolbar.
+#+begin_src emacs-lisp
+;(tool-bar-mode -1)
+#+end_src
+
+
+* Enable easy templates (from [[https://emacs.stackexchange.com/a/46992][here]])
+#+begin_src emacs-lisp
+  (require 'org-tempo)
+#+end_src
+
+* Keybindings
+** Personal keybindings
+
+Lets keep `C-c d` for personal shortcuts.
+#+begin_src emacs-lisp
+  (message "Enable personal shortcuts")
+  (global-set-key (kbd "C-c d p") #'org-pomodoro)
+  (global-set-key (kbd "C-c d g") #'org-gcal-post-at-point)
+  (global-set-key (kbd "C-c d i") #'org-anki-sync-entry)
+  ;; lets schedule everything at 10am today.
+  (global-set-key (kbd "C-c d r") #'dm/set-schedule-today-now)
+  (global-set-key (kbd "C-c d s") #'dm/hydra-inbox-sweep/body)
+  (global-set-key (kbd "C-c d l") #'dm/move-task-to-today-and-reset-schedule)
+  (global-set-key (kbd "C-c d c") #'dm/config)
+  (global-set-key (kbd "C-c d o") #'consult-org-heading)
+
+  (defun dm/set-schedule-today-now ()
+    "Set a SCHEDULED property on today's headline to a random timestamp."
+    (interactive)
+    (let* ((hour (+ (% (abs (random)) 7) 10))
+           (is_scheduled_already (org-element-property :scheduled  (org-element-at-point))) ;; get :SCHEDULED property, nil if not set.
+           (timestamp (format "%s:00" hour)))
+      (and (not is_scheduled_already) (org-schedule "today" timestamp))))
+
+#+end_src
+
+Recompile.
+#+begin_src emacs-lisp
+(global-set-key (kbd "C-c c") 'recompile)
+#+end_src
+
+Find symbol under cursor in current project
+#+begin_src elisp
+  (defun dm/consult-ag-under-cursor ()
+    (interactive)
+    "Find a symbol under cursor in project"
+    (consult-ag (projectile-project-root) (symbol-name (symbol-at-point))))
+
+  (global-set-key (kbd "C-c d f") #'dm/consult-ag-under-cursor)
+#+end_src
+
+* Org
+
+** Init
+
+#+begin_src emacs-lisp
+    (message "Init org")
+    (setq org-archive-location "~/org-roam.archive/%s_archive::")
+    (setq org-use-sub-superscripts '{})
+    (setq org-fold-core-style 'text-properties)    ;; org failing to org-cycle with org-mode 6.5.1. This is the work around.
+    (setq org-export-with-sub-superscripts nil)  ;; dont export sub/superscript (because it converts stuff_like_this into <sub><sup>)
+    ;; start up with org-indent-mode
+    (setq org-startup-indented nil)
+    (setq org-ellipsis "↪")
+    (setq org-outline-path-complete-in-steps nil)
+    (setq org-refile-targets '((org-agenda-files :maxlevel . 3)))
+    (setq org-refile-use-outline-path 'file)
+    (setq org-download-image-dir (concat org-directory "/images"))
+    (setq org-image-actual-width '(300))           ;; scale images to 300px when displaying them. Without this, things are too slow.
+    (setq org-download-heading-lvl nil)            ;; dont use headings when creating image names
+    (setq org-download-screenshot-method "/opt/homebrew/bin/pngpaste %s")
+    ;; for performance
+    (setq org-agenda-dim-blocked-tasks nil)
+    ;; Stop preparing agenda buffers on startup:
+    (setq org-agenda-inhibit-startup t)
+    (setq org-export-with-toc nil    ;; Disable table of contents globally
+        org-export-with-section-numbers nil)  ;; Disable section numbering globally
+
+#+end_src
+
+enable automated indent mode for org files
+#+begin_src emacs-lisp
+(add-hook 'org-mode-hook 'org-indent-mode)
+#+end_src
+
+Disable done tasks in agenda view.
+#+begin_src emacs-lisp
+  (setq org-agenda-skip-scheduled-if-done t)
+  (setq org-agenda-skip-deadline-if-done t)
+#+end_src
+
+Done tasks get a [[https://github.com/lmintmate/emacs.d#strikethrough-for-done-tasks][strike through]]
+#+begin_src emacs-lisp
+  (setq org-fontify-done-headline t)
+  (set-face-attribute 'org-done nil :foreground "PaleGreen" :strike-through t :weight 'bold)
+  (set-face-attribute 'org-headline-done nil :foreground "LightSalmon" :strike-through t)
+#+end_src
+
+
+
+#+begin_src emacs-lisp
+  (use-package org-superstar  :hook (org-mode . (lambda () (org-superstar-mode 1))))
+  (add-hook 'org-mode-hook (lambda () (org-superstar-mode 1)))
+
+  (setq org-superstar-headline-bullets-list '("🅐" "🅑" "🅒" "🅓"  "🅔"  "🅕"  "🅖"))
+  (setq org-superstar-special-todo-items t)
+  (setq org-superstar-todo-bullet-alist '(("TODO" . ?➽)
+                                          ("CURRENTLY" . ?⌛)
+                                          ("SOMEDAY" . ?⏱)
+                                          ("CANCELLED" . ?✘)
+                                          ("DONE" . ?✓)))
+#+end_src
+
+
+** Capture templates
+
+
+#+begin_src elisp
+  (defun dm/theme-balance-checklist-from-file ()
+  "Prepare Theme:Balance checklist"
+  (with-temp-buffer
+    (insert-file-contents "~/org-roam/theme_balance_checklist.org")  ;; Change path as needed
+    (buffer-string)))
+
+#+end_src
+
+
+#+begin_src emacs-lisp
+             (message "Enabling capture templates")
+                          (setq org-capture-templates
+                                `(
+                                  ("l" "Log" entry
+                                   (file+olp+datetree ,(concat org-directory "/log.org"))
+                                   "* Entered on %U
+                                                       %?
+                                                       ")
+                                  ("t" "TODO" entry
+                                   (file+headline ,(concat org-directory "/inbox.org") "INBOX")
+                                   "* TODO %?")
+                                  ("h" "how do i" entry
+                                   (file+headline ,(concat org-directory "/20200422070715_howdoi.org") "INBOX")
+                                   "* %?
+                                                         %i
+                                                         %a")
+                                   ("i" "TIL" entry
+                                 (file ,(concat org-directory "/til.org"))
+                                 "* %? ")
+
+
+                                  ("d" "Dailies")
+                                  ("p" "potatr")
+                                  ("pj" "Journal" entry
+                                   (file+olp+datetree "~/Dropbox/orgmode/potatr.org" "Log")
+                                   "* Entered on %U
+                                                       %?
+                                                       ")
+                                  ("di" "Important thing daily" entry
+                                   (file+olp+datetree ,(concat org-directory  "/important_things_daily_2026.org"))
+                                   "* Entered on %U
+            %?")
+
+                                  ("dj" "Journal" entry
+                                   (file+olp+datetree ,(concat org-directory "/personal-daily-2026.org"))
+                                   "* Entered on %U
+
+              Prompt: %(dm/get-journaling-prompt)
+
+            %?")
+
+            ("P" "copy/paste" entry
+
+                                   (file+headline ,(concat org-directory "/inbox.org") "INBOX")
+                                   "* Entered on %U
+
+              %(dm/get-clipboard-contents)
+
+            %?")
+                                              ("W" "TADA. Something good." entry
+                                   (file+olp+datetree ,(concat org-directory  "/tada_2026.org"))
+                    "* Entered on %U\n%?")
+
+            ("u" "1Unexpected task" entry (function dm/capture-unexpected-task-into-org-roam-daily) "* TODO [u]    %? ")
+            ("t" "Test" entry (function (lambda () (set-buffer (org-capture-target-buffer "~/test.org")) (goto-char (point-max)))) "* Level 2" :immediate-finish t)
+
+            ("T" "Theme: Balance" entry (file+olp+datetree ,(concat org-directory  "/theme_balance.org")) "* %U\n%(dm/theme-balance-checklist-from-file)")
+            ("r" "Reviews")
+            ("rm" "Monthly Review" entry (file+olp+datetree ,(concat org-directory  "/monthly_reviews.org")) "* %U\n%[~/org-roam/monthly-review-template.org]")
+            ("rw" "Weekly Review" entry (file+olp+datetree ,(concat org-directory  "/weekly_reviews.org")) "* %U\n%[~/org-roam/weekly-review-template.org]")
+
+
+            ("U" "URL Bookmark" entry
+           (file "~/org-roam/favurls.org")
+           "* %^{Headline} %^g
+  :PROPERTIES:
+  :URL: %^{URL}
+  :END:
+
+  "
+           :immediate-finish t)
+                                  ))
+
+
+            (message "Enable org-roam-dailies-templates")
+
+
+
+                          (setq org-roam-dailies-capture-templates
+                                '(("d" "autogenerated" plain (function dm/template)
+                                   :target (file+head "%<%Y-%m-%d>.org" "#+title: %<%Y-%m-%d>\n")
+                                   :jump-to-captured t
+                                   )
+
+
+                                  ))
+
+
+            (message "Enable org-roam-capture-templates")
+                          (setq org-roam-capture-templates
+                                `(("d" "default" plain "%?"
+                                   :target (file+head "${slug}.org"
+                                                      "#+title: ${title}\n")
+                                   :unnarrowed t)
+                                  ("b" "book" plain (file ,(concat org-directory "/book-review-template.org"))
+                                   :target (file+head "${slug}.org" "#+title: ${title}\n")
+                                   :jump-to-captured
+                                   )
+    ("n" "literature note" plain
+             "%?"
+             :target
+             (file+head
+              "%(expand-file-name (or citar-org-roam-subdir \"\") org-roam-directory)/${citar-citekey}.org"
+              "#+title: ${citar-citekey} (${citar-date}). ${note-title}.\n#+created: %U\n#+last_modified: %U\n\n")
+             :unnarrowed t)
+
+                                  )
+
+
+                                )
+
+#+end_src
+
+
+
+
+
+** custom agenda
+#+begin_src elisp
+  (use-package org-super-agenda
+    :after org-agenda evil
+    :init
+    (org-super-agenda-mode)
+    :config
+    (evil-set-initial-state 'org-agenda-mode 'normal))
+#+end_src
+
+#+begin_src emacs-lisp
+(setq org-agenda-files (list org-directory
+                             (concat org-directory "/daily")))
+#+end_src
+
+
+Disable done tasks in agenda view.
+#+begin_src emacs-lisp
+(setq org-agenda-skip-scheduled-if-done t)
+#+end_src
+
+Create a custom agenda view.
+#+begin_src emacs-lisp
+
+    (message "Enable custom agenda")
+    (setq org-agenda-start-on-weekday 1)
+    (setq calendar-week-start-day 1)
+
+    (setq org-agenda-custom-commands
+          '(
+          ("N" . "Next Actions List")
+          ("NN" tags "+TODO=\"NEXT\"|+TODO=\"STARTED\"")
+
+          ("NA" "Available NEXT actions"
+         ((org-ql-block
+           '(and (todo "NEXT")
+                 (or (not (scheduled))
+                     (scheduled :to today)))
+           ((org-ql-block-header "NEXT (available: unscheduled or scheduled <= today)")
+            (org-super-agenda-groups '((:auto-map dm/auto-group-by-parent-with-priority
+                                        :transformer (dm/add-age-to-item it))))
+            (org-agenda-sorting-strategy '(priority-down))))))
+  ("P" "Stuck Projects"
+           ((org-ql-block '(and (todo "PROJECT")
+                                (or (not (descendants))
+                                    (and (not (descendants
+                                               (or (todo "STARTED") (todo "NEXT"))))
+                                         (descendants
+                                          (and (or (todo "TODO") (todo "WAITING"))
+                                                           (not (deadline))
+                                                           (not (scheduled)))))
+                                    (not (descendants (or (todo "NEXT") (todo "TODO")
+                                                          (todo "WAITING")
+                                                          (todo "STARTED")))))))))
+
+
+            ("D" "Overview for today"
+             ((tags-todo "WORK:URGENT"
+                         ((org-agenda-overriding-header "Urgent Work")
+                          (org-agenda-skip-function 'org-agenda-skip-if-scheduled-later)))
+              (tags-todo "WORK:IMPORTANT"
+                         ((org-agenda-overriding-header "Important Work")
+                          (org-agenda-skip-function 'org-agenda-skip-if-run-with-idle-timerscheduled-later)))
+              (tags-todo "-WORK:URGENT"
+                         ((org-agenda-overriding-header "Mine Urgent")
+                          (org-agenda-skip-function 'org-agenda-skip-if-scheduled-later)))
+              (tags-todo "-WORK:IMPORTANT"
+                         ((org-agenda-overriding-header "Mine Important")
+                          (org-agenda-skip-function 'org-agenda-skip-if-scheduled-later)))
+              (agenda ""
+                      ((org-agenda-overriding-header "Today")
+                       (org-agenda-span 1)
+                       (org-agenda-sorting-strategy
+                        '(time-up priority-down))))))
+
+
+
+            ("r" "SIE" tags-todo "-CANCELLED/"
+           ((org-agenda-overriding-header "SIE Review")
+            (org-agenda-skip-function 'org-review-agenda-skip)
+            (org-agenda-cmp-user-defined 'org-review-compare)
+            (org-agenda-sorting-strategy '(user-defined-down))
+            (org-review-last-property-name org-sie-last-review-property)
+            (org-review-next-property-name org-sie-next-review-property)))
+
+            ("R" "Review projects" tags-todo "-CANCELLED/"
+             ((org-agenda-overriding-header "Reviews Scheduled")
+              (org-agenda-skip-function 'dm/org-review-agenda-skip)
+              (org-agenda-cmp-user-defined 'org-review-compare)
+              (org-agenda-sorting-strategy
+               '(user-defined-down))))
+            ("n" "Agenda and all TODOs"
+             ((agenda "" nil)
+              (alltodo "" nil))
+             nil)
+
+            ("k" "All items with time logged, but no tag"
+             ((alltodo "" ((org-agenda-skip-function
+                            (lambda ()
+                              (if (and (null (org-get-tags))
+                                       (>= (org-clock-sum-current-item) 1))
+                                  nil
+                                (or (outline-next-heading)
+                                    (point-max)))))))nil )
+
+                                            ;-----
+
+             ("N" "Notes" tags "NOTE"
+              ((org-agenda-overriding-header "Notes")
+               (org-tags-match-list-sublevels t)))
+             ("h" "Habits" tags-todo "STYLE=\"habit\""
+              ((org-agenda-overriding-header "Habits")
+               (org-agenda-sorting-strategy
+                '(todo-state-down effort-up category-keep))))
+             (" " "Agenda"
+              (
+               (tags-todo "-WORK:URGENT"
+                          ((org-agenda-overriding-header "Mine Urgent")
+                           (org-agenda-skip-function 'org-agenda-skip-if-scheduled-later)))
+               (tags-todo "-WORK:IMPORTANT"
+                          ((org-agenda-overriding-header "Mine Important")
+                           (org-agenda-skip-function 'org-agenda-skip-if-scheduled-later)))
+               (agenda ""
+                       ((org-agenda-overriding-header "Today")
+                        (org-agenda-span 1)
+                        (org-agenda-sorting-strategy
+                         '(time-up priority-down))))
+               (tags "REFILE"
+                     ((org-agenda-overriding-header "Tasks to Refile")
+                      (org-tags-match-list-sublevels nil)))
+               (tags-todo "-CANCELLED/!"
+                          ((org-agenda-overriding-header "Stuck Projects")
+                           (org-agenda-skip-function 'bh/skip-non-stuck-projects)
+                           (org-agenda-sorting-strategy
+                            '(category-keep))))
+               (tags-todo "-CANCELLED/!NEXT"
+                          ((org-agenda-overriding-header (concat "Project Next Tasks"
+                                                                 (if bh/hide-scheduled-and-waiting-next-tasks
+                                                                     ""
+                                                                   " (including WAITING and SCHEDULED tasks)")))
+                           (org-agenda-skip-function 'bh/skip-projects-and-habits-and-single-tasks)
+                           (org-tags-match-list-sublevels t)
+                           (org-agenda-todo-ignore-scheduled bh/hide-scheduled-and-waiting-next-tasks)
+                           (org-agenda-todo-ignore-deadlines bh/hide-scheduled-and-waiting-next-tasks)
+                           (org-agenda-todo-ignore-with-date bh/hide-scheduled-and-waiting-next-tasks)
+                           (org-agenda-sorting-strategy
+                            '(todo-state-down effort-up category-keep))))
+               (tags-todo "-CANCELLED+WAITING|HOLD/!"
+                          ((org-agenda-overriding-header (concat "Waiting and Postponed Tasks"
+                                                                 (if bh/hide-scheduled-and-waiting-next-tasks
+                                                                     ""
+                                                                   " (including WAITING and SCHEDULED tasks)")))
+                           (org-agenda-skip-function 'bh/skip-non-tasks)
+                           (org-tags-match-list-sublevels nil)
+                           (org-agenda-todo-ignore-scheduled bh/hide-scheduled-and-waiting-next-tasks)
+                           (org-agenda-todo-ignore-deadlines bh/hide-scheduled-and-waiting-next-tasks)))
+               nil)))))
+
+
+          (message "custom agenda loaded")
+#+end_src
+
+** Custom org functions
+#+begin_src emacs-lisp
+  (defun dm/auto-group-by-parent-with-priority (item)
+    "Return a grouping key for ITEM that sorts by priority then parent.
+  Format: \"N:Parent Name\" where N is priority (1=A, 2=B, 3=C, 4=none)."
+    (let* ((marker (or (get-text-property 0 'org-marker item)
+                       (get-text-property 0 'org-hd-marker item)))
+           ;; Try multiple ways to get priority
+           (pri-prop (get-text-property 0 'priority item))
+           (pri-face (get-text-property 0 'face item))
+           ;; Get priority directly from the org heading
+           (pri-from-marker (when marker
+                              (org-with-point-at marker
+                                (org-get-priority (thing-at-point 'line t)))))
+           ;; Also check for [#A] pattern in the item string
+           (pri-from-string (when (string-match "\\[#\\([ABC]\\)\\]" item)
+                              (pcase (match-string 1 item)
+                                ("A" 1) ("B" 2) ("C" 3))))
+           (pri-num (or pri-from-string
+                        (cond ((and pri-from-marker (>= pri-from-marker 3000)) 1)
+                              ((and pri-from-marker (>= pri-from-marker 2000)) 2)
+                              ((and pri-from-marker (>= pri-from-marker 1000)) 3)
+                              (t 4))))
+           (parent (when marker
+                     (org-with-point-at marker
+                       (if (org-up-heading-safe)
+                           (org-get-heading t t t t)
+                         "No parent")))))
+      ;; Return key with priority indicator for sorting
+      (let ((pri-label (pcase pri-num (1 "A") (2 "B") (3 "C") (_ "-"))))
+        (format "[%s] %s" pri-label (or parent "No parent")))))
+
+  (defun dm/get-state-change-time (target-state)
+    "Get the timestamp when the entry transitioned to TARGET-STATE.
+Searches for state change notes like: - State \"NEXT\" from \"TODO\" [timestamp]"
+    (save-excursion
+      (let ((bound (save-excursion (org-end-of-subtree t)))
+            (pattern (format "State \"%s\".*?\\[\\([0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}\\( [A-Za-z]\\{2,3\\}\\)?\\( [0-9]\\{2\\}:[0-9]\\{2\\}\\)?\\)\\]"
+                             target-state)))
+        (when (re-search-forward pattern bound t)
+          (org-time-string-to-time (match-string 1))))))
+
+  (defun dm/add-age-to-item (item)
+    "Add age prefix to agenda ITEM string, preserving text properties."
+    (if (stringp item)
+        (let* ((marker (or (get-text-property 0 'org-marker item)
+                           (get-text-property 0 'org-hd-marker item)))
+               (age-str "    "))
+          (when marker
+            (org-with-point-at marker
+              (let ((state-change-time (dm/get-state-change-time "NEXT")))
+                (when state-change-time
+                  (let ((days (- (time-to-days (current-time))
+                                 (time-to-days state-change-time))))
+                    (setq age-str
+                          (cond
+                           ((< days 1) "    ")
+                           ((< days 7) (format "%3dd" days))
+                           ((< days 30) (propertize (format "%3dw" (/ days 7))
+                                                    'face 'warning))
+                           (t (propertize (format "%3dm" (/ days 30))
+                                          'face 'error)))))))))
+          ;; Preserve text properties by copying them to the new string
+          (let* ((props (text-properties-at 0 item))
+                 (new-item (concat age-str " " item)))
+            (add-text-properties 0 (length new-item) props new-item)
+            new-item))
+      ;; If it's a group structure, transform the items within it
+      (if (plistp item)
+          (let ((items (plist-get item :items)))
+            (plist-put item :items (mapcar #'dm/add-age-to-item items))
+            item)
+        item)))
+
+  (defun org-agenda-skip-if-scheduled-later ()
+  "If this function returns nil, the current match should not be skipped.
+  Otherwise, the function must return a position from where the search
+  should be continued."
+    (ignore-errors
+      (let ((subtree-end (save-excursion (org-end-of-subtree t)))
+            (scheduled-seconds
+              (time-to-seconds
+                (org-time-string-to-time
+                  (org-entry-get nil "SCHEDULED"))))
+            (now (time-to-seconds (current-time))))
+         (and scheduled-seconds
+              (>= scheduled-seconds now)
+              subtree-end))))
+#+end_src
+
+** packages
+Time tracking with org-pomodoro.
+
+#+begin_src elisp
+  (use-package org-pomodoro)
+#+end_src
+
+** Other
+Fancy TODO states
+#+begin_src emacs-lisp
+  (message "Fancy todo states")
+  ;; (setq org-todo-keywords
+  ;;       '((sequence "TODO(t)" "NEXT(n)" "|" "DONE(d)")
+  ;;               (sequence "WAITING(w@/!)" "HOLD(h@/!)" "|" "CANCELLED(c@/!)" "PHONE" "MEETING")))
+
+
+  (setq org-todo-keywords
+      (quote ((sequence "TODO(t!/!)" "NEXT(n!/!)"
+                        "STARTED(s!)" "|" "DONE(d!/!)")
+              (type "PROJECT(p!/!)" "|" "DONE_PROJECT(D!/!)")
+              (sequence "WAITING(w@/!)" "SOMEDAY(S!)"  "|"
+                        "CANCELLED(c@/!)"))))
+#+end_src
+
+** Shortcuts
+org-agenda everywhere.
+
+#+begin_src emacs-lisp
+(global-set-key "\C-ca" 'org-agenda)
+#+end_src
+
+* Modules
+
+** [[https://github.com/nobiot/org-transclusion][org-transclusion]]
+
+Include nodes from other files
+
+Suggested keymappings:
+
+
+(define-key global-map (kbd "<f12>") #'org-transclusion-add)
+(define-key global-map (kbd "C-n t") #'org-transclusion-mode)
+
+
+** Magit
+#+begin_src elisp
+  (straight-use-package 'git-commit-mode)
+  (use-package magit :ensure t :defer t)
+  (use-package forge :after magit :defer t)
+#+end_src
+
+** paredit
+#+begin_src elisp
+  (use-package paredit
+
+  :config
+  ;(add-hook 'emacs-lisp-mode-hook #'paredit-mode)
+  ;; enable in the *scratch* buffer
+  ;(add-hook 'lisp-interaction-mode-hook #'paredit-mode)
+  ;(add-hook 'ielm-mode-hook #'paredit-mode)
+  ;(add-hook 'lisp-mode-hook #'paredit-mode)
+  ;(add-hook 'eval-expression-minibuffer-setup-hook #'paredit-mode)
+;  (diminish 'paredit-mode "()")
+)
+
+#+end_src
+
+** Tabbar
+
+Show a tabbar at the top of the screen.
+
+#+begin_src emacs-lisp
+  ;; (use-package tabbar
+  ;;
+  ;; :config (tabbar-mode 0)
+  ;; )
+#+end_src
+
+
+#+begin_src emacs-lisp
+;(global-tab-line-mode 1)
+#+end_src
+
+
+#+begin_src emacs-lisp
+  ;; (use-package centaur-tabs
+  ;; :demand
+  ;; :config
+  ;; (centaur-tabs-mode t)
+  ;; :bind
+  ;; ("C-<prior>" . centaur-tabs-backward)
+  ;; ("C-<next>" . centaur-tabs-forward))
+#+end_src
+
+** Treemacs
+A file browser.
+
+#+begin_src elisp
+  (use-package treemacs )
+  (use-package treemacs-projectile )
+  (use-package treemacs-all-the-icons )
+#+end_src
+
+
+
+#+begin_src emacs-lisp
+
+  ;; (use-package treemacs
+  ;;
+  ;;    :defer t
+  ;;    :config
+  ;;    (progn
+
+  ;;      (setq treemacs-follow-after-init          t
+  ;;            treemacs-width                      35
+  ;;            treemacs-indentation                2
+  ;;            treemacs-git-integration            t
+  ;;            treemacs-collapse-dirs              3
+  ;;            treemacs-silent-refresh             nil
+  ;;            treemacs-change-root-without-asking nil
+  ;;            treemacs-sorting                    'alphabetic-desc
+  ;;            treemacs-show-hidden-files          t
+  ;;            treemacs-never-persist              nil
+  ;;            treemacs-is-never-other-window      nil
+  ;;            treemacs-goto-tag-strategy          'refetch-index)
+
+  ;;      (treemacs-follow-mode t)
+  ;;      (treemacs-filewatch-mode t))
+  ;;    :bind
+  ;;    (:map global-map
+  ;;          ([f8]        . treemacs-toggle)
+  ;;          ([f9]        . treemacs-projectile-toggle)
+  ;;          ("<C-M-tab>" . treemacs-toggle)
+  ;;          ("M-0"       . treemacs-select-window)
+  ;;          ("C-c 1"     . treemacs-delete-other-windows)
+  ;;        ))
+
+
+  ;;  (use-package treemacs-projectile
+  ;;    :defer t
+  ;;
+  ;;    :config
+  ;;    (setq treemacs-header-function #'treemacs-projectile-create-header)
+  ;;    )
+
+
+
+#+end_src
+
+** Projectile
+
+Navigating within projects.
+
+#+begin_src emacs-lisp
+  (projectile-mode +1)
+  (define-key projectile-mode-map (kbd "C-c p") 'projectile-command-map)
+  (setq projectile-project-search-path '("~/workspace/" "~/workspace/github" ))
+#+end_src
+
+** Random
+
+[[https://github.com/abo-abo/org-download/][org-download]]; copy and pasting images
+
+#+begin_src emacs-lisp
+(use-package org-download :ensure t :demand t)
+#+end_src
+
+fzf support
+#+begin_src emacs-lisp
+;(use-package fzf )
+#+end_src
+
+[[https://github.com/domtronn/all-the-icons.el/tree/d922aff57ac8308d3ed067f9151cc76d342855f2][all the icons!]]
+#+begin_src emacs-lisp
+(use-package all-the-icons :defer 0.5)
+#+end_src
+
+[[https://github.com/gregsexton/origami.el/tree/e558710a975e8511b9386edc81cd6bdd0a5bda74][Fancy text folding]]
+#+begin_src emacs-lisp
+;(use-package origami )
+#+end_src
+
+
+WhichKey
+#+begin_src emacs-lisp
+  (use-package which-key
+    :config
+    (which-key-mode))
+#+end_src
+
+
+dimmer, highlight current buffer
+#+begin_src emacs-lisp
+;;  (use-package dimmer
+ ;;   :config
+ ;;   (setq dimmer-adjustment-mode :both)
+ ;;   (dimmer-configure-which-key)
+ ;;   (dimmer-mode t))
+#+end_src
+
+org-roam
+#+begin_src emacs-lisp
+      (message "Org-roam")
+      (defun dm/goto-index (&optional key asdf)
+        (interactive)
+        (find-file (org-roam-node-file (org-roam-node-from-title-or-alias "index"))) t)
+
+    (define-key global-map (kbd "C-c n ]") #'dm/goto-index)
+      ;; keybindings for org-roam
+      (use-package org-roam
+        :defer 3
+        :custom
+        (org-roam-directory (file-truename org-directory))
+        :bind (("C-c n l" . org-roam-buffer-toggle)
+               ("C-c n f" . org-roam-node-find)
+               ("C-c n g" . org-roam-graph)
+               ("C-c n i" . org-roam-node-insert)
+               ("C-c n I" . org-roam-node-insert-immediate)
+               ("C-c n c" . org-roam-capture)
+               ("C-c n t" . org-roam-dailies-goto-today)
+               ("C-c n y" . org-roam-dailies-goto-previous-note)
+               ("C-c n n" . org-roam-dailies-goto-tomorrow)
+               ("C-c n u" . org-roam-ui-open)
+               ;; Dailies
+               )
+        :config
+        (org-roam-db-autosync-mode)
+        ;; If using org-roam-protocol
+        :init
+        (require 'org-roam-protocol)
+        (setq org-roam-db-node-include-function
+              (lambda ()
+                (not (member "DO_NOT_ORG_ROAM" (org-get-tags)))))
+        )
+
+  (message "Done org-roam")
+
+#+end_src
+
+
+org-roam-ui
+#+begin_src emacs-lisp
+  (use-package org-roam-ui
+
+    :after org-roam
+    ;;         normally we'd recommend hooking orui after org-roam, but since org-roam does not have
+    ;;         a hookable mode anymore, you're advised to pick something yourself
+    ;;         if you don't care about startup time, use
+    ;;  :hook (after-init . org-roam-ui-mode)
+    :config
+    (setq org-roam-ui-sync-theme t
+          org-roam-ui-follow nil
+          org-roam-ui-update-on-save t
+          org-roam-ui-open-on-start nil)
+    ;;           (run-with-idle-timer 100 nil (lambda () org-roam-ui-mode))
+    )
+
+
+  ;; dont save for desktop.el
+  ;;  (add-to-list 'desktop-minor-mode-table
+  ;;             '(org-roam-ui-mode nil))
+  ;;(add-to-list 'desktop-minor-mode-table
+  ;;            '(org-roam-ui-follow-mode nil))
+#+end_src
+
+
+Python
+
+#+begin_src emacs-lisp
+  (use-package elpy
+    :config
+    :defer t ; dont load this immediately
+    :init
+    (advice-add 'python-mode :before 'elpy-enable))
+
+  ;; Enable Flycheck
+  ;(when (require 'flycheck nil t)
+  ;  (setq elpy-modules (delq 'elpy-module-flymake elpy-modules))
+  ;  (add-hook 'elpy-mode-hook 'flycheck-mode))
+
+  ;; python formatter
+  (use-package blacken )
+  (use-package dap-mode )
+                                          ;(use-package dap-ui )
+                                          ;(use-package dap-python  :config (dap-mode 1) (dap-ui-mode 1))
+#+end_src
+
+
+git-auto-commit-mode
+
+track every change in git.
+#+begin_src emacs-lisp
+  (use-package git-auto-commit-mode)
+  (message "Done git-auto-commit-mode")
+
+#+end_src
+
+
+[[https://melpa.org/#/expand-region][expand-region]], intelligently adjust selection
+#+begin_src emacs-lisp
+(use-package expand-region  :config
+    (global-set-key (kbd "C-=") 'er/expand-region))
+#+end_src
+
+Fuzzy? matching. ~org refi~, matches ~org-refile~ and ~org-agenda-refile~
+
+#+begin_src emacs-lisp
+(defun org-add-my-extra-fonts ()
+  "Add extra fonts."
+  (add-to-list 'org-font-lock-extra-keywords '("\\(!\\)\\([^\n\r\t]+?\\)\\(!\\)" (1 '(face highlight invisible t)) (2 'highlight t) (3 '(face highlight invisible t))) t))
+
+(add-hook 'org-font-lock-set-keywords-hook #'org-add-my-extra-fonts)
+
+; highlighting https://www.gonsie.com/blorg/org-highlight.html
+(defun my-html-mark-tag (text backend info)
+  "Transcode :blah: into <mark>blah</mark> in body text."
+  (when (org-export-derived-backend-p backend 'html)
+    (let ((text (replace-regexp-in-string "\\(!\\)\\([^\n\r\t]+?\\)\\(!\\)" "<mark>"  text nil nil 1 nil)))
+      (replace-regexp-in-string "\\(<mark>\\)\\([^\n\r\t]+?\\)\\(!\\)" "</mark>" text nil nil 3 nil))))
+
+; TODO it looks like it's not available during load. need to arrange it in correct order.
+;(add-to-list 'org-export-filter-plain-text-functions 'my-html-mark-tag)
+
+ #+end_src
+
+** ox-hugo
+ #+begin_src elisp
+   (message "ox-hugo")
+   (use-package ox-hugo :demand t)
+ #+end_src
+
+
+** Mocha (JS testing support)
+ #+begin_src elisp
+   (use-package mocha :defer t)
+
+ #+end_src
+
+
+*** More typescript support
+#+begin_src elisp
+  ;;(use-package flymake-eslint)
+
+    (message "typescript-mode")
+
+    (use-package typescript-mode
+      :defer t
+      :after flymake-eslint
+      :init
+      (define-derived-mode typescript-tsx-mode typescript-mode "tsx")
+      (flymake-eslint-enable)
+      :config
+      (setq typescript-indent-level 2)
+      (add-hook 'typescript-mode #'subword-mode)
+      (add-to-list 'auto-mode-alist '("\\.tsx?\\'" . typescript-tsx-mode)))
+
+    ;;(use-package tree-sitter
+
+      ;; :hook ((typescript-mode . tree-sitter-hl-mode)
+      ;;        (typescript-tsx-mode . tree-sitter-hl-mode)))
+
+    (use-package tree-sitter-langs
+
+      :after tree-sitter
+      :config
+      (tree-sitter-require 'tsx)
+      (add-to-list 'tree-sitter-major-mode-language-alist '(typescript-tsx-mode . tsx)))
+
+#+end_src
+
+** LSP Mode
+#+begin_src elisp
+  (message "lsp-mode")
+  (use-package lsp-mode
+    :after company
+
+    :init
+    ;; set prefix for lsp-command-keymap (few alternatives - "C-l", "C-c l")
+    (setq lsp-keymap-prefix "C-c l")
+    :hook (;; replace XXX-mode with concrete major-mode(e. g. python-mode)
+           (typescript-mode . lsp)
+           ;; if you want which-key integration
+           (lsp-mode . lsp-enable-which-key-integration))
+    :commands lsp)
+
+  ;; optionally
+  (use-package lsp-ui  :commands lsp-ui-mode)
+  ;; if you are helm user
+                                          ;    (use-package helm-lsp  :commands helm-lsp-workspace-symbol)
+  ;; if you are ivy user
+  (use-package lsp-treemacs  :commands lsp-treemacs-errors-list)
+
+  ;; optionally if you want to use debugger
+                                          ;  (use-package dap-mode )
+                                          ; (use-package dap-typescript )
+
+  ;; optional if you want which-key integration
+  (use-package which-key
+    :config
+    (which-key-mode))
+
+
+#+end_src
+** Color in terminal (like M-x compile)
+#+begin_src elisp
+  (use-package xterm-color
+    :config
+    (require 'xterm-color)
+    (setq compilation-environment '("TERM=xterm-256color"))
+    (defun my/advice-compilation-filter (f proc string)
+      (funcall f proc (xterm-color-filter string)))
+    (advice-add 'compilation-filter :around #'my/advice-compilation-filter))
+#+end_src
+
+** Compile mode improvements
+From [[https://massimilianomirra.com/notes/lightweight-external-command-integration-in-emacs-via-compilation-mode/][here]].
+#+begin_src emacs-lisp
+  (setq compilation-scroll-output 'first-error)
+  (setq scroll-conservatively 101)
+#+end_src
+
+** Ankiorg-
+#+begin_src elisp
+  (use-package anki-editor
+    :config
+    ; I like making decks
+    (setq anki-editor-create-decks 't))
+    (customize-set-variable 'org-anki-default-deck "Mega::org-2024")
+#+end_src
+
+** Gcal
+#+begin_src elisp
+   (require 'plstore)
+   (add-to-list 'plstore-encrypt-to "8A2283088CD49937")
+
+#+end_src
+
+
+1. To add a calendar, go to settings (3 dots) and the find =Calendar ID=
+2. If not syncing: do =M-x org-gcal-sync-tokens-clear=. Tokens need to be cleared/refetched when adding a new calendar.
+3. Clear the org-id cache too (=rm ~/.emacs.d/.org-id-locations= and =M-x org-id-update-id-location=
+
+#+begin_src elisp
+  (message "gcal")
+  (use-package org-gcal
+    :after org
+    :config
+    (setq org-gcal-up-days 7)      ;; Days before today
+    (setq org-gcal-down-days 30)   ;; Days after today
+    (setq org-gcal-auto-archive t)
+
+    (setq org-gcal-remove-api-cancelled-event t) ;; delete removed events without asking.
+    ;; find calendar Id in the calendar settings
+    (setq org-gcal-header-alist '(("dmitrym@gmail.com" . "#+PROPERTY: TIMELINE_FACE \"pink\"\n"))
+          org-gcal-file-alist `(
+                                ("dmitrym@gmail.com" .  ,(concat org-directory "gcal.org"))
+                           ;;     ("dmitry.markushevich@varsitytutors.com" .  ,(concat org-directory "vt-cal.org"))
+                                ("r7d2lpfs96r5l79oltg49rh6rmnjpcs8@import.calendar.google.com" . ,(concat org-directory "kayen-cal.org")) ;; kayen's hockey
+                                ("c6oo61f4r9rsboqcisaep2rbsknq87s5@import.calendar.google.com" . ,(concat org-directory "maya-cal.org")) ;; maya ringette
+                                ("eok3gdluocm6eg05c4v1t2aq1oiugj8e@import.calendar.google.com" . ,(concat org-directory "diefenbaker-cal.org"))
+                                ("e6mpl77k84bv6chkkiqjcdunofsumt7q@import.calendar.google.com" . ,(concat org-directory "mcmath-cal.org"))
+
+                                )
+          org-gcal-notify-p nil)
+    )
+
+
+  (setq plstore-cache-passphrase-for-symmetric-encryption t)
+
+
+
+  (setq org-gcal-remove-api-cancelled-events t) ;; delete removed events without asking.
+                                          ;(add-hook 'org-agenda-mode-hook 'org-gcal-fetch)
+                                          ;(add-hook 'org-capture-after-finalize-hook 'org-gcal-fetch))
+
+#+end_src
+
+** Org-capture-popout frame
+#+begin_src emacs-lisp
+  (load-file "~/workspace/emacs-nursery/capture.el")
+  (load-file "~/workspace/emacs-nursery/org-project.el")
+#+end_src
+
+** Company mode (autocompletion)
+#+begin_src elisp
+  (use-package company
+
+    :bind (:map company-active-map
+                ("TAB" . company-select-common)
+                ("C-n" . company-select-next)
+                ("C-p" . company-select-previous))
+    :hook (company-mode . evil-normalize-keymaps)
+    :config
+    (setq company-idle-delay 0.3)
+    (setq company-backends '((company-capf company-dabbrev-code)))
+    (add-to-list 'copilot-disable-display-predicates #'company--active-p)
+    (global-company-mode nil))
+
+
+  ;; With use-package:
+  (use-package company-box
+    :hook (company-mode . company-box-mode)
+    :after (company all-the-icons)
+    :config
+    (setq company-box-show-single-candidate t
+       company-box-backends-colors       nil
+       company-box-max-candidates        50
+       company-box-icons-alist           'company-box-icons-all-the-icons))
+
+
+#+end_src
+
+** [[https://github.com/alphapapa/ts.el][ts.el]] (time manipulation)
+#+begin_src elisp
+   (use-package ts )
+#+end_src
+
+** dark room
+#+begin_src
+  (use-package darkroom )
+#+end_src
+
+** raindbow delimeters
+#+begin_src elisp
+  (use-package rainbow-delimiters
+    :hook ((emacs-lisp-mode . rainbow-delimiters-mode)
+           (clojure-mode . rainbow-delimiters-mode))
+    )
+#+end_src
+
+
+** Anki
+#+begin_src elisp
+  (use-package org-anki )
+#+end_src
+
+** [[https://github.com/publicimageltd/delve][delve]]
+
+** roam timestamps
+#+begin_src elisp
+  ;; (use-package org-roam-timestamps
+  ;;   :after org-roam
+  ;;   :config (org-roam-timestamps-mode) (setq org-roam-timestamps-remember-timestamps t))
+#+end_src
+
+** org-pomodoro-third-time
+#+begin_src elisp
+  (use-package org-pomodoro-third-time  :init (org-pomodoro-third-time-mode +1)
+    :straight (:repo "telotortium/org-pomodoro-third-time"
+                     :host github
+                     :type git))
+
+
+#+end_src
+
+
+** PlantUML
+#+begin_src elisp
+  (use-package plantuml-mode  :init
+    ;; Sample executable configuration
+    ;; this is for org  mode export
+    (setq org-plantuml-executable-path "/opt/homebrew/bin/plantuml")
+    (setq org-plantuml-exec-mode 'plantuml)
+
+  ;; this is for the majhor mode :facepalm
+    (setq plantuml-executable-path "/opt/homebrew/bin/plantuml")
+    (setq plantuml-default-exec-mode 'executable)
+
+
+    (add-to-list 'org-src-lang-modes '("plantuml" . plantuml))
+    (org-babel-do-load-languages 'org-babel-load-languages '((plantuml . t)))
+    (org-babel-do-load-languages 'org-babel-load-languages '((shell . t)))
+    (setq org-confirm-babel-evaluate nil))
+
+
+  ;; dont ask to evaluate blocks
+
+
+#+end_src
+
+
+* Last
+Start maximized
+** TODO There's some issue with this; probably due to the order of operations?
+#+begin_src emacs-lisp
+  (add-hook 'window-setup-hook 'toggle-frame-maximized t)
+  (toggle-frame-maximized)
+  (add-to-list 'initial-frame-alist '(fullscreen . maximized))
+
+#+end_src
+
+
+** Start Emacs server
+#+begin_src emacs-lisp
+  (server-start)
+#+end_src
+
+** misc
+timer setup.
+#+begin_src emacs-lisp
+
+;;   (setq dmm-agenda-timer nil)
+;;     (setq dm-idle-gcal-sync (run-with-idle-timer (* 60 60 3) t (lambda () (org-gcal-sync))))
+;;   (defun dm/set-timer ()
+;;     (when dmm-agenda-timer (cancel-timer dmm-agenda-timer))
+;;     (setq dmm-agenda-timer (run-with-idle-timer 20 nil (lambda () (load-file "~/workspace/github/agenda-html/agenda-html.el")))))
+;; ;;  (add-hook 'org-after-todo-state-change-hook 'dm/set-timer)
+(run-with-idle-timer (* 60 5) nil (lambda () (dm/update-agenda-file-list)))
+#+end_src
+
+#+RESULTS:
+: [nil 0 300 0 nil #[nil ((dm/update-agenda-file-list)) nil] nil idle 0 nil]
+
+* Custom LISP
+** Pomodoro support
+
+Call this from xbar to show remaining pomodoro time.
+
+#+begin_src emacs-lisp
+  (setq org-pomodoro-notified-getting-there nil)
+  (setq org-pomodoro-notified-almost-over nil)
+
+  (defun jx/produce-pomodoro-string-for-menu-bar ()
+    "Produce the string for the current pomodoro counter to display on the menu bar"
+    (let ((prefix (cl-case org-pomodoro-state
+                    (:pomodoro "P")
+                    (:overtime "O")
+                    (:short-break "B")
+                    (:long-break "LB"))))
+      (if (and (org-pomodoro-active-p) (> (length prefix) 0))
+          (list prefix (org-pomodoro-format-seconds)) "N/A")))
+
+
+  (defun org-pomodoro-reset-notification-markers(&rest optional )
+    "reset notification variables so that when we get close to the pomodor being over we get a notification"
+    (message "Reset org-pomodoro notification markers")
+    (setq org-pomodoro-notified-getting-there nil)
+    (setq org-pomodoro-notified-almost-over nil)
+    )
+
+
+  (load-file "~/workspace/emacs-nursery/pomodoro-notify.el")
+
+  ;; time to run every 3 seconds to check how much pomodoro time is left
+  (run-with-timer 0 3 'dm/org-pomodoro-notify)
+
+  (add-hook 'org-pomodoro-third-time-modify-end-time-hook #'org-pomodoro-reset-notification-markers)
+  (add-hook 'org-pomodoro-started-hook #'org-pomodoro-reset-notification-markers)
+
+  (defun org-pomodoro-third-time-increment ()
+    (org-pomodoro-third-time-end-in (floor ( / (+ (org-pomodoro-remaining-seconds) 300) 60))))
+
+  (defun org-pomodoro-third-time-decrement ()
+    (org-pomodoro-third-time-end-in (floor ( / (- (org-pomodoro-remaining-seconds) 300) 60))))
+
+
+  (defun org-pomodoro-restart ()
+    (org-pomodoro-kill)
+    (org-pomodoro '(16)))
+#+end_src
+
+** Bind Immediate
+
+Create an org-roam node and insert a link to it in the current buffer. Helpful when you want to create a node but don't want to intterupt the current flow of writing.
+
+#+begin_src elisp
+  (defun org-roam-node-insert-immediate (arg &rest args)
+    (interactive "P")
+    (let ((args (cons arg args))
+          (org-roam-capture-templates (list (append (car org-roam-capture-templates)
+                                                    '(:immediate-finish t)))))
+      (apply #'org-roam-node-insert args)))
+#+end_src
+
+
+
+** time stamps in warnings
+#+begin_src elisp
+  ;;   (defun sh/current-time-microseconds ()
+  ;;   "Return the current time formatted to include microseconds."
+  ;;   (let* ((nowtime (current-time))
+  ;;          (now-ms (nth 2 nowtime)))
+  ;;     (concat (format-time-string "[%Y-%m-%dT%T" nowtime) (format ".%d]" now-ms))))
+
+  ;; (defun sh/ad-timestamp-message (FORMAT-STRING &rest args)
+  ;;   "Advice to run before `message' that prepends a timestamp to each message.
+
+  ;; ;; Activate this advice with:
+  ;; ;; (advice-add 'message :before 'sh/ad-timestamp-message)"
+  ;;   (unless (string-equal FORMAT-STRING "%s%s")
+  ;;     (let ((deactivate-mark nil)
+  ;;           (inhibit-read-only t))
+  ;;       (with-current-buffer "*Messages*"
+  ;;         (goto-char (point-max))
+  ;;         (if (not (bolp))
+  ;;           (newline))
+  ;;         (insert (sh/current-time-microseconds) " ")))))
+
+  ;; (advice-add 'message :before 'sh/ad-timestamp-message)
+
+#+end_src
+
+
+* Remembering recent stuff
+
+Remember recent files,
+#+begin_src elisp
+  (recentf-mode 1)
+#+end_src
+
+Remember minibuffer
+#+begin_src elisp
+  (setq history-length 25)
+#+end_src
+
+
+Remember and restore the last cursor location of opened files
+#+begin_src elisp
+  (save-place-mode 1)
+#+end_src
+
+
+* Auto revert
+Ensure that files are reloaded from disk (when switching branches, or from dropbox sync)
+
+Inotify is a linux feature; doesn't work on mac.
+#+begin_src elisp
+  (global-auto-revert-mode 1)
+  (setq auto-revert-use-notify nil)
+  (setq global-auto-revert-non-file-buffers nil)
+#+end_src
+
+* Testing
+
+** [2022-02-26 Sat]
+
+focus-autosave-mode, save all emacs buffers when emacs loses focus
+
+- [2022-11-16 Wed] is this causing delays on leaving emacs?
+- [2023-03-26 Sun] re-enabling again.
+
+#+begin_src elisp
+  (use-package focus-autosave-mode  :init (focus-autosave-mode))
+#+end_src
+
+** [2022-03-09 Wed]
+blogging with ox-hugo
+#+begin_src elisp
+  (use-package ox-hugo
+     ;Auto-install the package from Melpa
+  :pin melpa  ;`package-archives' should already have ("melpa" . "https://melpa.org/packages/")
+  :after ox
+  :defer t)
+
+
+  (with-eval-after-load 'ox-hugo
+  (add-to-list 'org-hugo-special-block-type-properties '("raw" . (:raw t))))
+#+end_src
+
+
+** [2022-03-14 Mon]
+#+begin_src elisp
+  (setq mac-command-modifier 'super)
+  (global-set-key (kbd "s-v") 'org-yank)
+#+end_src
+
+
+* [2022-03-15 Tue]
+
+Take care of weird mac bindings in emacs-mac from [[https://gist.github.com/railwaycat/3498096][here]].
+
+
+#+begin_src elisp
+    ;; Keybonds
+  (global-set-key [(hyper a)] 'mark-whole-buffer)
+  (global-set-key [(hyper v)] 'yank)
+  (global-set-key [(hyper c)] 'kill-ring-save)
+  (global-set-key [(hyper s)] 'save-buffer)
+  (global-set-key [(hyper l)] 'goto-line)
+  (global-set-key [(hyper w)]
+                  (lambda () (interactive) (delete-window)))
+  (global-set-key [(hyper z)] 'undo)
+
+  ;; mac switch meta key
+  (defun mac-switch-meta nil
+    "switch meta between Option and Command"
+    (interactive)
+    (if (eq mac-option-modifier nil)
+        (progn
+          (setq mac-option-modifier 'meta)
+          (setq mac-command-modifier 'hyper)
+          )
+      (progn
+        (setq mac-option-modifier nil)
+        (setq mac-command-modifier 'meta)
+        )
+      )
+    )
+
+
+  ;; facepalm
+
+  (mac-switch-meta)
+  (mac-switch-meta)
+#+end_src
+
+
+
+
+
+
+** [2022-03-16 Wed]
+[[https://protesilaos.com/emacs/pulsar#h:96289426-8480-4ea6-9053-280348adc0ed][Pulsar]] highlights where the cursor is.
+
+#+begin_src elisp
+  (defface dm/pulsar-yellow
+    '((default :extend t)
+      (((class color) (min-colors 88) (background light))
+       :background "#fff29a")
+      (((class color) (min-colors 88) (background dark))
+       :background "#FFFF00")
+      (t :inverse-video t))
+    "Alternative yellow face for `pulsar-face'."
+    :group 'pulsar-faces)
+
+
+  ;; (use-package pulsar
+  ;;   :init
+  ;;   (pulsar-global-mode 1)
+  ;;   :config
+  ;;   (setq pulsar-pulse-on-window-change t)
+  ;;   (setq pulsar-pulse t)
+  ;;   (setq pulsar-delay 0.055)
+  ;;   (setq pulsar-iterations 10)
+  ;;   (setq pulsar-face 'dm/pulsar-yellow)
+  ;;   (setq pulsar-highlight-face 'dm/pulsar-yellow))
+
+  ;; (add-hook 'minibuffer-setup-hook #'pulsar-pulse-line)
+  ;; (add-hook 'consult-after-jump-hook #'pulsar-recenter-top)
+  ;; (add-hook 'consult-after-jump-hook #'pulsar-reveal-entry)
+  ;; (add-hook 'window-selection-change-functions #'pulsar-pulse-line)
+  ;; (add-hook 'window-state-change-hook #'pulsar-pulse-line)
+  ;; (setq pulsar-pulse t)
+#+end_src
+
+
+#+begin_src elisp
+  (load-theme 'modus-vivendi 't)
+
+#+end_src
+
+
+
+* [2022-03-17 Thu]
+
+
+[[https://github.com/publicimageltd/delve][delve]], org-roam dashboard
+#+begin_src elisp
+
+#+end_src
+
+
+
+
+
+
+** [2022-03-21 Mon]
+#+begin_src elisp
+  (use-package vulpea
+
+    ;; hook into org-roam-db-autosync-mode you wish to enable
+    ;; persistence of meta values (see respective section in README to
+    ;; find out what meta means)
+    :hook ((org-roam-db-autosync-mode . vulpea-db-autosync-enable)))
+
+  (use-package project )
+
+
+#+end_src
+
+** [2022-03-28 Mon]
+get all falcon external docs
+#+begin_src elisp
+(defun vulpea-falcon-external-doc-files ()
+    "Return a list of note files containing 'project' tag." ;
+    (seq-uniq
+     (seq-map
+      #'car
+      (org-roam-db-query
+       [:select [nodes:file]
+        :from tags
+        :left-join nodes
+        :on (= tags:node-id nodes:id)
+        :where (like tag (quote "%\"falcon_doc_external\"%"))]))))
+#+end_src
+
+** [2022-03-29 Tue]
+#+begin_src elisp
+  (use-package undo-fu )
+
+
+
+  ;; (use-package undo-tree
+  ;;
+  ;;   :diminish                       ;; Don't show an icon in the modeline
+  ;;   :bind ("C-x u" . undo-tree-visualize)
+  ;;   ;;    :hook (org-mode . undo-tree-mode) ;; For some reason, I need this. FIXME.
+  ;;   :config
+  ;;   ;; Always have it on
+  ;;   (global-undo-tree-mode)
+
+
+  ;;   (setq undo-tree-history-directory-alist '(("." . "~/.config/emacs/undo-tree-history")))
+
+  ;;   ;; Each node in the undo tree should have a timestamp.
+  ;;   (setq undo-tree-visualizer-timestamps t)
+
+  ;;   ;; Show a diff window displaying changes between undo nodes.
+  ;;   (setq undo-tree-visualizer-diff t))
+
+
+#+end_src
+
+
+** [2022-04-03 Sun]
+
+modern orgmode https://github.com/minad/org-modern
+
+#+begin_src emacs-lisp
+  ;; (use-package org-modern )
+  ;; (add-hook 'org-mode-hook #'org-modern-mode)
+  ;; (add-hook 'org-agenda-finalize-hook #'org-modern-agenda)
+
+  ;; https://github.com/koekeishiya/yabai/issues/1197#issuecomment-1100977096
+  ;; this is needed so that emacs doesn't steal/loose focus
+   (tool-bar-mode -1)
+   (scroll-bar-mode -1)
+
+  ;; Add frame borders and window dividers
+#+end_src
+
+
+
+
+** [2022-04-08 Fri] pdf templates
+
+
+#+begin_src elisp
+    (setq org-latex-pdf-process
+        '("latexmk -pdflatex='pdflatex -interaction nonstopmode' -pdf -bibtex -f %f"))
+
+
+
+  (unless (boundp 'org-latex-classes)
+    (setq org-latex-classes nil))
+
+  (add-to-list 'org-latex-classes
+               '("ethz"
+                 "\\documentclass[a4paper,11pt,titlepage]{memoir}
+  \\usepackage[utf8]{inputenc}
+  \\usepackage[T1]{fontenc}
+  \\usepackage{fixltx2e}
+  \\usepackage{graphicx}
+  \\usepackage{longtable}
+  \\usepackage{float}
+  \\usepackage{wrapfig}
+  \\usepackage{rotating}
+  \\usepackage[normalem]{ulem}
+  \\usepackage{amsmath}
+  \\usepackage{textcomp}
+  \\usepackage{marvosym}
+  \\usepackage{wasysym}
+  \\usepackage{amssymb}
+  \\usepackage{hyperref}
+  \\usepackage{mathpazo}
+  \\usepackage{color}
+  \\usepackage{enumerate}
+  \\definecolor{bg}{rgb}{0.95,0.95,0.95}
+  \\tolerance=1000
+        [NO-DEFAULT-PACKAGES]
+        [PACKAGES]
+        [EXTRA]
+  \\linespread{1.1}
+  \\hypersetup{pdfborder=0 0 0}"
+                 ("\\chapter{%s}" . "\\chapter*{%s}")
+                 ("\\section{%s}" . "\\section*{%s}")
+                 ("\\subsection{%s}" . "\\subsection*{%s}")
+                 ("\\subsubsection{%s}" . "\\subsubsection*{%s}")
+                 ("\\paragraph{%s}" . "\\paragraph*{%s}")
+                 ("\\subparagraph{%s}" . "\\subparagraph*{%s}")))
+
+
+  (add-to-list 'org-latex-classes
+               '("article"
+                 "\\documentclass[11pt,a4paper]{article}
+  \\usepackage[utf8]{inputenc}
+  \\usepackage[T1]{fontenc}
+  \\usepackage{fixltx2e}
+  \\usepackage{graphicx}
+  \\usepackage{longtable}
+  \\usepackage{float}
+  \\usepackage{wrapfig}
+  \\usepackage{rotating}
+  \\usepackage[normalem]{ulem}
+  \\usepackage{amsmath}
+  \\usepackage{textcomp}
+  \\usepackage{marvosym}
+  \\usepackage{wasysym}
+  \\usepackage{amssymb}
+  \\usepackage{hyperref}
+  \\usepackage{mathpazo}
+  \\usepackage{color}
+  \\usepackage{enumerate}
+  \\definecolor{bg}{rgb}{0.95,0.95,0.95}
+  \\tolerance=1000
+        [NO-DEFAULT-PACKAGES]
+        [PACKAGES]
+        [EXTRA]
+  \\linespread{1.1}
+  "
+                 ("\\section{%s}" . "\\section*{%s}")
+                 ("\\subsection{%s}" . "\\subsection*{%s}")
+                 ("\\subsubsection{%s}" . "\\subsubsection*{%s}")
+                 ("\\paragraph{%s}" . "\\paragraph*{%s}")))
+
+
+  (add-to-list 'org-latex-classes '("ebook"
+                                    "\\documentclass[11pt, oneside]{memoir}
+  \\setstocksize{9in}{6in}
+  \\settrimmedsize{\\stockheight}{\\stockwidth}{*}
+  \\setlrmarginsandblock{2cm}{2cm}{*} % Left and right margin
+  \\setulmarginsandblock{2cm}{2cm}{*} % Upper and lower margin
+  \\checkandfixthelayout
+  % Much more laTeX code omitted
+  "
+                                    ("\\chapter{%s}" . "\\chapter*{%s}")
+                                    ("\\section{%s}" . "\\section*{%s}")
+                                    ("\\subsection{%s}" . "\\subsection*{%s}")))
+
+#+end_src
+
+
+
+** [2022-04-08 Fri]
+
+
+#+begin_src elisp
+
+(use-package org-review )
+
+  (defun dm/org-review-agenda-skip ()
+    (and (not (or (org-review-toreview-p) (not (org-review-last-review-prop))))
+         (org-with-wide-buffer (or (outline-next-heading) (point-max)))))
+
+
+  (add-hook 'org-agenda-mode-hook
+          (lambda ()
+            (local-set-key (kbd "C-c C-r")
+                           'org-review-insert-last-review)))
+
+#+end_src
+
+
+** ...
+
+#+begin_src elisp
+(setq org-agenda-hide-tags-regexp (regexp-opt '("DO_NOT_ORG_ROAM" "MINE" "WORK" "IMPORTANT")))
+#+end_src
+
+** reveal
+#+begin_src elisp
+(use-package org-re-reveal )
+#+end_src
+
+** evil mode
+
+Sourced from [[https://github.com/hiecaq/quinoa42.github.io/blob/gh-pages/org/dot-emacs.org][here]].
+
+#+begin_src elisp
+
+        (use-package general
+
+          :after which-key
+          :config
+          (general-evil-setup)
+          (general-create-definer my/leader-def
+            ;; :prefix my-leader
+            :prefix "C-c d")
+          )
+
+        (setq evil-want-keybinding nil)
+        (use-package evil
+         :custom
+          (evil-esc-delay 0.001 "avoid ESC/meta mixups")
+          (evil-shift-width 4)
+          (evil-search-module 'evil-search)
+          (evil-symbol-word-search t) ;; search for symbols at point
+          (evil-want-fine-undo t)
+          :general
+    ;;      ([remap evil-ex-search-forward] '(lambda () (interactive) (swiper (format "%s" (thing-at-point 'symbol)))))
+    ;;      ([remap evil-ex-search-backward] '(lambda () (interactive) (swiper-backward (format "%s" (thing-at-point 'symbol)))))
+          ([remap evil-emacs-state] 'evil-normal-state)
+          ([remap evil-undo] 'undo-fu-only-undo)
+          ([remap evil-redo] 'undo-fu-only-redo)
+  ;;        ([remap evil-ex-search-word-forward] 'symbol-overlay-switch-forward)
+          (setq evil-disable-insert-state-bindings t)
+          (setq evil-undo-system 'undo-fu)
+          ;;(define-key evil-motion-state-map "/" 'swiper)
+          ;;(define-key evil-motion-state-map "*" '(lambda () (interactive) (swiper (format "%s" (thing-at-point 'symbol)))))
+          :config
+          ;; Enable evil-mode in all buffers.
+          (evil-mode 1)
+
+
+        ;; force the use of dumb jump when looking for definitions.
+        (define-key evil-motion-state-map (kbd "gd") #'dumb-jump-go))
+
+
+        (message "Basic evil loaded.")
+
+
+        (setq evil-want-keybinding nil)
+        (use-package evil-collection
+          :ensure t
+          :demand t
+          :after evil
+          :config
+          (setq evil-want-keybinding nil)
+          (evil-collection-init 'vterm)
+          (evil-collection-init))
+
+
+
+        ;; (use-package swiper-helm
+        ;;
+        ;;   :after (helm-config swiper)
+        ;;   :general ("C-s" 'swiper-helm))
+
+
+  #+end_src
+
+  slow?
+#+begin_src elisp
+
+        (use-package highlight-indent-guides
+
+          :hook (prog-mode . highlight-indent-guides-mode)
+          :init
+          (general-setq highlight-indent-guides-responsive 'top)
+          ;; (general-setq highlight-indent-guides-method 'character)
+          (general-setq highlight-indent-guides-method 'bitmap)
+          (general-setq highlight-indent-guides-character ?│))
+
+
+         (use-package evil-org
+
+          :after (org evil)
+          :hook
+          (org-mode . (lambda () (evil-org-mode 1)))
+          (org-agenda-mode . (lambda () (evil-org-mode 1)))
+          :general
+          (org-src-mode-map [remap evil-write] 'org-edit-src-save)
+          :commands org-agenda
+          :config
+          (evil-org-set-key-theme)
+          (require 'evil-org-agenda)
+          (evil-org-agenda-set-keys))
+
+
+        ; this is way more powerful.
+        (use-package evil-nerd-commenter
+          :config
+          (global-set-key (kbd "M-;") 'evilnc-comment-or-uncomment-lines))
+
+      (use-package evil-matchit
+        :init
+        (global-evil-matchit-mode 1))
+
+
+
+
+        (message "done with evil.")
+
+
+#+end_src
+
+
+#+begin_src elisp
+  (defun minibuffer-keyboard-quit ()
+    "Abort recursive edit.
+  In Delete Selection mode, if the mark is active, just deactivate it;
+  then it takes a second \\[keyboard-quit] to abort the minibuffer."
+    (interactive)
+    (if (and delete-selection-mode transient-mark-mode mark-active)
+        (setq deactivate-mark  t)
+      (when (get-buffer "*Completions*") (delete-windows-on "*Completions*"))
+      (abort-recursive-edit)))
+  (define-key evil-normal-state-map [escape] 'keyboard-quit)
+  (define-key evil-visual-state-map [escape] 'keyboard-quit)
+  (define-key minibuffer-local-map [escape] 'minibuffer-keyboard-quit)
+  (define-key minibuffer-local-ns-map [escape] 'minibuffer-keyboard-quit)
+  (define-key minibuffer-local-completion-map [escape] 'minibuffer-keyboard-quit)
+  (define-key minibuffer-local-must-match-map [escape] 'minibuffer-keyboard-quit)
+  (define-key minibuffer-local-isearch-map [escape] 'minibuffer-keyboard-quit)
+
+  (message "Load recursive quit.")
+#+end_src
+
+
+
+
+
+** Hyperscheduler
+#+end_src
+
+
+#+begin_src elisp
+    (use-package templatel :demand t)
+
+
+
+#+end_src
+
+
+
+* [2022-06-06 Mon]
+#+begin_src elisp
+  ;; (use-package centered-cursor-mode
+
+  ;; :demand
+  ;; :config
+  ;; ;; Optional, enables centered-cursor-mode in all buffers.
+  ;; (global-centered-cursor-mode))
+
+#+end_src
+
+
+
+
+* org-dc
+#+begin_src elisp
+(load-file "~/workspace/org-dynamic-checklists/org-dc.el")
+#+end_src
+
+
+* Hydra
+
+#+begin_src elisp
+
+   (setq refile-file (concat org-directory "/refile.org"))
+
+     (defhydra dm/hydra-inbox-sweep (:color pink
+                                :hint nil)
+     
+   _c_: content       _p_: pin           _f_: fitness       _m_: misc     _w_: wishlist
+   _e_: eating/food   _b_: books
+   _l_: not now
+   "
+     ("c" (dm/refile-to refile-file "Content"))
+     ("p" (dm/refile-to refile-file "To Pin"))
+     ("f" (dm/refile-to refile-file "Fitness"))
+     ("m" (dm/refile-to refile-file "Misc"))
+     ("l" (dm/refile-to refile-file "Not Now"))
+     ("w" (dm/refile-to refile-file "Wishlist"))
+     ("e" (dm/refile-to refile-file "Food"))
+     ("b" (dm/refile-to refile-file "Books"))
+
+     ("q" nil "quit" :color blue))
+
+  (message "Done with my refile hydra")
+#+end_src
+
+
+
+
+
+* Schedule subtree randomly.
+#+begin_src elisp
+  (defun print-entries ()
+    (message (cdr (assoc "ITEM" (org-entry-properties)))))
+
+  (defun dm/schedule-subtree ()
+    (interactive)
+    (org-map-entries #'dm/set-schedule-today-now "TODO=\"TODO\"" 'tree))
+#+end_src
+
+
+
+* Ankify subtree
+
+1. Create a heading, "Anki"
+2. Add [[https://github.com/eyeinsky/org-anki][org-anki cards]]
+3. Put point on the "Anki" heading.
+4. Invoke ~dm/ankify-subtree~.
+
+#+begin_src elisp
+(defun dm/ankify-subtree ()
+  "Ankify all direct children of the heading at point.
+Each child heading will be processed by org-anki-sync-entry."
+  (interactive)
+  (let* ((heading (cdr (assoc "ITEM" (org-entry-properties))))
+         (has-more-siblings t)) ; Flag to track if we have more siblings
+    (message "Ankifying children of: \"%s\"" heading)
+    (save-excursion
+      ;; Move to the first child
+      (when (org-goto-first-child)
+        ;; Process all siblings at this level
+        (while has-more-siblings
+          (org-anki-sync-entry)
+          (sleep-for 0.1)
+          ;; Try to move to next sibling, exit loop if none left
+          (setq has-more-siblings (org-goto-sibling)))))))
+#+end_src
+
+
+
+* Agenda files optimization
+
+#+begin_src elisp
+
+#+end_src
+
+
+
+
+* Quick refile
+
+Refiles current headline to ~FILE~ and ~HEADLINE~. Headline must be an exact match:
+
+~(dm/refile-to "refile.org" "Content")~
+
+#+begin_src elisp
+  (defun dm/refile-to (file headline)
+    "Move current headline to specified location"
+    (save-window-excursion
+      (let ((pos (save-excursion
+                   (find-file file)
+                   (org-find-exact-headline-in-buffer headline))))
+        (org-refile nil nil (list headline file nil pos)))))
+
+#+end_src
+
+#+RESULTS:
+: dm/refile-to
+
+
+
+* dumb jump
+Use ~gd~ to jump to definitions in evil mode.
+#+begin_src elisp
+
+  (use-package dumb-jump
+    :config
+    (setq dumb-jump-force-searcher 'ag)
+    (setq dumb-jump-debug nil)
+    (setq xref-show-definitions-function #'xref-show-definitions-completing-read)
+    (add-hook 'xref-backend-functions #'dumb-jump-xref-activate) ; to use with evil
+    :bind (("C-M-g" . dumb-jump-go)
+           ("C-M-p" . dumb-jump-back)
+           ("C-M-q" . dumb-jump-quick-look)))
+
+
+
+  (defhydra dumb-jump-hydra (:color blue :columns 3)
+    "Dumb Jump"
+    ("j" dumb-jump-go "Go")
+    ("o" dumb-jump-go-other-window "Other window")
+    ("e" dumb-jump-go-prefer-external "Go external")
+    ("x" dumb-jump-go-prefer-external-other-window "Go external other window")
+    ("i" dumb-jump-go-prompt "Prompt")
+    ("l" dumb-jump-quick-look "Quick look")
+    ("b" dumb-jump-back "Back"))
+
+  (message "dumb jump loaded.")
+#+end_src
+
+
+
+* keyfreq
+
+#+begin_src elisp
+    (use-package keyfreq
+    :config
+    (keyfreq-mode 1)
+    (keyfreq-autosave-mode 1))
+
+#+end_src
+
+
+
+* Epub, nov.el mode,
+
+#+begin_src elisp
+
+(use-package nov )
+  (add-to-list 'auto-mode-alist '("\\.epub\\'" . nov-mode))
+
+  (message "nov.el Loaded")
+#+end_src
+
+
+
+* evil work arounds
+
+#+begin_src elisp
+  (message "Evil work arounds loaded")
+  (evil-set-initial-state 'nov-mode 'emacs)
+  (evil-set-initial-state 'pocket-reader-mode 'emacs)
+  (add-hook 'org-fc-review-flip-mode-hook 'evil-emacs-state)
+  (add-hook 'org-fc-review-rate-mode-hook 'evil-emacs-state)
+  (add-hook 'org-fc-after-review-hook 'evil-normal-state)
+#+end_src
+
+
+
+* [dm] Capture a headline into today's daily.
+
+#+begin_src elisp
+  (message "enable my custom functions")
+
+
+  (defun dm/goto-tasks-heading ()
+    "Find the tasks heading"
+    (search-forward "* Tasks"))
+
+
+  (defun dm/get-todays-daily-file ()
+    "Gets the path to today's daily file"
+    (let* ((daily-file (format "%s.org" (format-time-string "%Y-%m-%d")))
+           (full-path (concat org-roam-directory "/" org-roam-dailies-directory daily-file )))
+      full-path)
+    )
+
+  (defun dm/move-task-to-today-and-reset-schedule ()
+    "Moves a task from an old daily note to today's note"
+    (interactive)
+    (let* ((daily-file (dm/get-todays-daily-file)))
+      (save-window-excursion
+        (when (string-equal "org-agenda-mode" major-mode)
+          (org-agenda-goto))
+        (org-cut-subtree)
+        (find-file daily-file)
+        (goto-line 1)
+        (dm/goto-tasks-heading)
+        (org-paste-subtree)
+        (org-schedule nil (format-time-string  "%Y-%m-%d 12:00"))
+        )
+      ))
+
+
+
+  (defun dm/link-todo-into-todays-daily ()
+    "Links the headline at point into today's tasks in the daily note."
+    (let* ((daily-file (format "%s.org" (format-time-string "%Y-%m-%d")))
+           (full-path (concat org-roam-directory "/" org-roam-dailies-directory daily-file ))
+           (heading-id (org-id-get-create))
+           (heading (cdr (assoc "ITEM" (org-entry-properties)))))
+      (save-window-excursion
+        (find-file full-path)
+        (goto-line 1)
+        (dm/goto-tasks-heading)
+        (evil-org-end-of-line)
+        (org-insert-todo-subheading "")
+        (org-insert-link nil (format "id:%s" heading-id) heading)
+        )
+      )
+    )
+
+
+
+  (defun dm/link-agenda-item-into-todays-daily ()
+    (save-window-excursion
+      (org-agenda-goto)
+      (dm/link-todo-into-todays-daily)))
+
+#+end_src
+
+
+
+* Get journal prompt
+#+begin_src elisp
+  (defun dm/get-journaling-prompt ()
+    "Returns a single line from journaling prompts."
+    (save-window-excursion
+      (find-file (concat (file-truename org-roam-directory) "/journaling_prompts.org"))
+      (goto-char (point-max))
+      (let* ((number-of-prompts (- (line-number-at-pos) 10)))
+        (goto-line (+ 10 (random number-of-prompts)))
+        (s-chomp (thing-at-point 'line t)))))
+
+
+
+
+#+end_src
+
+
+
+* org-noter-fork
+
+#+begin_src elisp
+   (message "load org noter fork.")
+
+
+
+   (use-package pdf-tools
+:config
+(pdf-tools-install)
+  (setq pdf-view-use-scaling t)
+
+)
+
+   ;; (use-package org-noter
+   ;;   :straight (
+   ;;              :type git
+   ;;              :repo "https://github.com/org-noter/org-noter"
+   ;;              ))
+
+  (use-package org-noter
+             :straight (:type git :local-repo "~/workspace/org-noter"
+        		      :no-build t
+        		      :no-install t
+        		      :branch "master")
+             :after pdf-tools
+	     :config
+(org-noter-enable-org-roam-integration)
+   (setq org-noter-max-short-selected-text-length 700000)
+   (setq org-noter-max-short-length 0)
+
+
+   (define-key org-noter-doc-mode-map (kbd "M-i") nil)
+   (define-key pdf-view-mode-map (kbd "C-u") nil)
+   (define-key org-noter-doc-mode-map (kbd "M-i") #'dm/insert-precise)
+)
+
+
+
+
+
+
+   ;; (use-package org-noter )
+
+
+   (defun dm/insert-precise (&optional optional)
+     (interactive "P")
+     (org-noter-insert-precise-note 't))
+
+   ;; (push "~/workspace/org-noter-plus-djvu" load-path)
+   ;; (push "~/workspace/org-noter-plus-djvu/other" load-path)
+   ;; (push "~/workspace/org-noter-plus-djvu/modules" load-path)
+
+   ;; (require 'org-noter)
+   ;; (require 'org-noter-nov)
+   ;; (require 'org-noter-pdf)
+
+
+   ;; (define-advice org-noter--insert-heading (:after (level title &optional newlines-number location) add-full-body-quote)
+   ;;   "Advice for org-noter--insert-heading.
+
+   ;;   When inserting a precise note insert the text of the note in the body as an org mode QUOTE block.
+
+   ;;   =org-noter-max-short-length= should be set to a large value to short circuit the normal behavior:
+   ;;   =(setq org-noter-max-short-length 80000)="
+
+   ;;   ;; this tells us it's a precise note that's being invoked.
+   ;;   (if (consp location)
+   ;;       (insert (format "#+BEGIN_QUOTE\n%s\n#+END_QUOTE" title))))
+
+   ;; ;; (require 'org-noter-nov-overlay)
+   ;; doesn't work. (require 'org-noter-integration)
+
+
+   ;;  (use-package pdf-tools-org-noter-helpers
+   ;;   :straight (
+   ;;              :type git :repo "https://github.com/analyticd/pdf-tools-org-noter-helpers")
+   ;;   :config
+   ;; (require 'pdf-tools-org-noter-helpers))
+
+
+#+end_src
+
+
+#+begin_src elisp
+  ;; (use-package org-noter
+  ;;   :straight
+  ;;   (:repo "dmitrym0/org-noter-plus"
+  ;;     :host github
+  ;;     :type git
+  ;;     :files ("*")))
+
+#+end_src
+
+* Move text
+#+begin_src elisp
+  (use-package move-text
+    :config
+    (move-text-default-bindings)
+    )
+
+#+end_src
+
+
+* ws-butler
+
+#+begin_src elisp
+  ;; (use-package ws-butler
+  ;; :config
+  ;; (ws-butler-global-mode))
+
+#+end_src
+
+Preserve emacs open buffers. Restore 5 on open and then when emacs is idle open more. It's =~/.emacs.d/.emacs.desktop=
+
+#+begin_src emacs-lisp
+  ;; Disabled - desktop-save-mode is off
+  ;; (message "Load desktop")
+  ;; (desktop-read)
+#+end_src
+
+
+* conflict resolution
+#+begin_src elisp
+  (message "Enable conflict resolution with sync thing")
+  (use-package emacs-conflict
+  :straight (emacs-conflict :type git :host github :repo "ibizaman/emacs-conflict" :branch "master"))
+
+#+end_src
+
+
+* pdf-tools
+
+#+begin_src elisp
+#+end_src
+
+
+* Misc
+
+https://adam.kruszewski.name/2022-05-08-org-publish-call-org-fold-core-region-error.html
+#+begin_quote
+To workaround it, just set org-fold-core-style to its pre org-mode 9.6 default value (it changed with 9.6), like this:
+#+end_quote
+
+#+begin_src elisp
+  (setq org-fold-core-style  'overlay)
+#+end_src
+
+
+* VERTICO
+
+#+begin_src elisp
+    (message "Enable vertico")
+    (use-package consult )
+    (use-package consult-ag)
+    (use-package vertico
+    :general
+    (:keymaps 'vertico-map
+              "C-f" 'vertico-next-group)
+      :init
+      (vertico-mode)
+
+      ;; Different scroll margin
+      (setq vertico-scroll-margin 0)
+
+      ;; Show more candidates
+      (setq vertico-count 20)
+
+      ;; Grow and shrink the Vertico minibuffer
+      ;;(setq vertico-resize t)
+
+      ;; Optionally enable cycling for `vertico-next' and `vertico-previous'.
+      (setq vertico-cycle t)
+      )
+
+
+    ;; Persist history over Emacs restarts. Vertico sorts by history position.
+    ;;(use-package savehist :init (savehist-mode))
+
+
+    (use-package orderless
+
+      :init
+      ;; Configure a custom style dispatcher (see the Consult wiki)
+      ;; (setq orderless-style-dispatchers '(+orderless-dispatch)
+      ;;       orderless-component-separator #'orderless-escapable-split-on-space)
+      (setq completion-styles '(orderless basic)
+            completion-category-defaults nil
+            completion-category-overrides '((file (styles partial-completion)))))
+
+    ;;(require 'vertico-posframe)
+      ;; (use-package vertico-posframe
+      ;;   :after vertico
+      ;;   :straight (:type git :host github :repo "tumashu/vertico-posframe" :branch "main")
+      ;;   :init (vertico-posframe-mode 1))
+
+
+
+
+    (use-package marginalia
+      :after vertico
+      :general
+      (:keymaps 'minibuffer-local-map
+                "M-A" 'marginalia-cycle
+                "M-Q" 'vertico-scroll-down
+                )
+
+      :custom
+      (marginalia-annotators '(marginalia-annotators-heavy marginalia-annotators-light nil))
+      :init
+      (marginalia-mode))
+
+  (use-package all-the-icons-completion
+    :after (marginalia all-the-icons)
+    :hook (marginalia-mode . all-the-icons-completion-marginalia-setup)
+    :init
+    (all-the-icons-completion-mode))
+
+    ;; this is what does completion in the minibuffer
+    ;; Use `consult-completion-in-region' if Vertico is enabled.
+    ;; Otherwise use the default `completion--in-region' function.
+    (setq completion-in-region-function
+          (lambda (&rest args)
+            (apply (if vertico-mode
+                       #'consult-completion-in-region
+                     #'completion--in-region)
+                   args)))
+
+
+    ;; since global-visual-line-mode is enabled
+    ;; make sure we invoke kill-line in vertico
+    ;; (define-key vertico-map (kbd "C-k") #'kill-line)
+    ;; (define-key vertico-map "C-k" #'kill-line)
+    ;; (define-key vertico-map "C-f" #'evil-scroll-page-down)
+    ;; (define-key consult-narrow-map "C-f" #'evil-scroll-page-down)
+    ;; (define-key minibuffer-local-map "C-f" #'evil-scroll-page-down)
+
+    ;; (define-key consult-narrow-map  (kbd "C-k") #'kill-line)
+    ;; (define-key consult-narrow-map  (kbd "C-k") #'kill-line)
+    ;; (define-key vertico-map (kbd "C-f") #'scroll-down-command)
+    (define-key vertico-map (kbd "<next>") #'vertico-scroll-up)
+  (define-key vertico-map (kbd "<prior>") #'vertico-scroll-down)
+
+      (add-hook 'minibuffer-setup-hook (lambda ()
+                                       (visual-line-mode -1)))
+
+
+
+    ;; work around for org-refile
+
+    ;; Alternative 2: Complete full paths
+    (setq org-refile-use-outline-path 'file
+          org-outline-path-complete-in-steps nil)
+  ;;(pos
+    ;;(pos
+
+
+    ;;   (setq org-refile-use-outline-path 'file
+    ;;       org-outline-path-complete-in-steps t)
+    ;; (advice-add #'org-olpath-completing-read :around
+    ;;             (lambda (&rest args)
+    ;;               (minibuffer-with-setup-hook
+    ;;                   (lambda () (setq-local completion-styles '(basic)))
+    ;;                 (apply args))))
+
+#+end_src
+
+
+* Corfu (autocompletion)
+
+#+begin_src elisp
+  (use-package corfu
+    ;; Optional customizations
+    :custom
+    (corfu-cycle t)                ;; Enable cycling for `corfu-next/previous'
+    (corfu-auto t)                 ;; Enable auto completion
+    (corfu-separator ?\s)          ;; Orderless field separator
+    (corfu-quit-at-boundary nil)   ;; Never quit at completion boundary
+    (corfu-quit-no-match nil)      ;; Never quit, even if there is no match
+    (corfu-preview-current nil)    ;; Disable current candidate preview
+    (corfu-preselect-first nil)    ;; Disable candidate preselection
+    (corfu-on-exact-match nil)     ;; Configure handling of exact matches
+    (corfu-echo-documentation nil) ;; Disable documentation in the echo area
+    (corfu-scroll-margin 5)        ;; Use scroll margin
+    (global-corfu-minibuffer nil)
+    :hook (corfu-mode . corfu-popupinfo-mode)
+    ;; Enable Corfu only for certain modes.
+    ;; :hook ((prog-mode . corfu-mode)
+    ;;        (shell-mode . corfu-mode)
+    ;;        (eshell-mode . corfu-mode))
+
+    ;; Recommended: Enable Corfu globally.
+    ;; This is recommended since Dabbrev can be used globally (M-/).
+    ;; See also `corfu-excluded-modes'.
+    :init
+    (global-corfu-mode)
+    (corfu-popupinfo-mode nil)
+    (setq corfu-popupinfo-delay 0.5) ;;; how long to wait before popping up the docs
+    )
+
+
+  ;; Enable auto completion and configure quitting
+  (setq corfu-auto nil
+        corfu-quit-no-match 'separator) ;; or t
+
+
+  (use-package corfu-candidate-overlay
+    :straight (:type git
+                     :repo "https://code.bsdgeek.org/adam/corfu-candidate-overlay"
+                     :files (:defaults "*.el"))
+    :after corfu
+    :config
+    ;; enable corfu-candidate-overlay mode globally
+    ;; this relies on having corfu-auto set to nil
+    (corfu-candidate-overlay-mode +1)
+    ;; bind Ctrl + TAB to trigger the completion popup of corfu
+    (global-set-key (kbd "C-<tab>") 'completion-at-point)
+    ;; bind Ctrl + Shift + Tab to trigger completion of the first candidate
+    ;; (keybing <iso-lefttab> may not work for your keyboard model)
+    (global-set-key (kbd "C-<iso-lefttab>") 'corfu-candidate-overlay-complete-at-point))
+
+  (use-package kind-icon
+    :ensure t
+    :after corfu
+                                          ;:custom
+                                          ; (kind-icon-blend-background t)
+                                          ; (kind-icon-default-face 'corfu-default) ; only needed with blend-background
+    :config
+    (add-to-list 'corfu-margin-formatters #'kind-icon-margin-formatter))
+#+end_src
+
+
+Orderless, borrowed from [[https://kristofferbalintona.me/posts/202202211546/][here]].
+
+#+begin_src
+  (use-package orderless
+  :custom
+  (completion-styles '(orderless))      ; Use orderless
+  (completion-category-defaults nil)    ; I want to be in control!
+  (completion-category-overrides
+   '((file (styles basic-remote ; For `tramp' hostname completion with `vertico'
+                   orderless)))))
+
+
+#+end_src
+
+
+
+* Consult
+
+
+
+#+begin_src elisp
+  (message "Enabling consult.")
+      (use-package consult
+      ;; Replace bindings. Lazily loaded due by `use-package'.
+      :bind (;; C-c bindings (mode-specific-map)
+             ("C-c h" . consult-history)
+             ("C-c m" . consult-mode-command)
+             ("C-c k" . consult-kmacro)
+             ;; C-x bindings (ctl-x-map)
+             ("C-x M-:" . consult-complex-command)     ;; orig. repeat-complex-command
+             ("C-x b" . consult-buffer)                ;; orig. switch-to-buffer
+             ("C-x 4 b" . consult-buffer-other-window) ;; orig. switch-to-buffer-other-window
+             ("C-x 5 b" . consult-buffer-other-frame)  ;; orig. switch-to-buffer-other-frame
+             ("C-x r b" . consult-bookmark)            ;; orig. bookmark-jump
+             ("C-x p b" . consult-project-buffer)      ;; orig. project-switch-to-buffer
+             ;; Custom M-# bindings for fast register access
+             ("M-#" . consult-register-load)
+             ("M-'" . consult-register-store)          ;; orig. abbrev-prefix-mark (unrelated)
+             ("C-M-#" . consult-register)
+             ;; Other custom bindings
+             ("M-y" . consult-yank-pop)                ;; orig. yank-pop
+             ("<help> a" . consult-apropos)            ;; orig. apropos-command
+             ;; M-g bindings (goto-map)
+             ("M-g e" . consult-compile-error)
+             ("M-g f" . consult-flymake)               ;; Alternative: consult-flycheck
+             ("M-g g" . consult-goto-line)             ;; orig. goto-line
+             ("M-g M-g" . consult-goto-line)           ;; orig. goto-line
+             ("M-g o" . consult-outline)               ;; Alternative: consult-org-heading
+             ("M-g m" . consult-mark)
+             ("M-g k" . consult-global-mark)
+             ("M-g i" . consult-imenu)
+             ("M-g I" . consult-imenu-multi)
+             ;; M-s bindings (search-map)
+             ("M-s d" . consult-find)
+             ("M-s D" . consult-locate)
+             ("M-s g" . consult-grep)
+             ("M-s G" . consult-git-grep)
+             ("M-s r" . consult-ripgrep)
+             ("M-s l" . consult-line)
+             ("M-s L" . consult-line-multi)
+             ("M-s m" . consult-multi-occur)
+             ("M-s k" . consult-keep-lines)
+             ("M-s u" . consult-focus-lines)
+             ;; Isearch integration
+             ("M-s e" . consult-isearch-history)
+             :map isearch-mode-map
+             ("M-e" . consult-isearch-history)         ;; orig. isearch-edit-string
+             ("M-s e" . consult-isearch-history)       ;; orig. isearch-edit-string
+             ("M-s l" . consult-line)                  ;; needed by consult-line to detect isearch
+             ("M-s L" . consult-line-multi)            ;; needed by consult-line to detect isearch
+             ;; Minibuffer history
+             :map minibuffer-local-map
+             ("M-s" . consult-history)                 ;; orig. next-matching-history-element
+             ("M-r" . consult-history))                ;; orig. previous-matching-history-element
+
+      ;; Enable automatic preview at point in the *Completions* buffer. This is
+      ;; relevant when you use the default completion UI.
+      :hook (completion-list-mode . consult-preview-at-point-mode)
+
+      ;; The :init configuration is always executed (Not lazy)
+      :init
+
+      ;; Optionally configure the register formatting. This improves the register
+      ;; preview for `consult-register', `consult-register-load',
+      ;; `consult-register-store' and the Emacs built-ins.
+      (setq register-preview-delay 5
+            register-preview-function #'consult-register-format)
+
+      ;; Optionally tweak the register preview window.
+      ;; This adds thin lines, sorting and hides the mode line of the window.
+      (advice-add #'register-preview :override #'consult-register-window)
+
+      ;; Use Consult to select xref locations with preview
+      (setq xref-show-xrefs-function #'consult-xref
+            xref-show-definitions-function #'consult-xref)
+
+      ;; Configure other variables and modes in the :config section,
+      ;; after lazily loading the package.
+      :config
+
+      ;; Optionally configure preview. The default value
+      ;; is 'any, such that any key triggers the preview.
+      ;; (setq consult-preview-key 'any)
+      ;; (setq consult-preview-key (kbd "M-."))
+      ;; (setq consult-preview-key (list (kbd "<S-down>") (kbd "<S-up>")))
+      ;; For some commands and buffer sources it is useful to configure the
+      ;; :preview-key on a per-command basis using the `consult-customize' macro.
+
+
+(consult-customize consult-theme
+                   :preview-key
+                   '("M-."
+                     :debounce 0.5 "<up>" "<down>"
+                     :debounce 1 any))
+
+;      (consult-customize
+;       consult-theme
+;       :preview-key '(:debounce 0.2 any)
+;       consult-ripgrep consult-git-grep consult-grep
+;       consult-bookmark consult-recent-file consult-xref
+;       consult--source-bookmark consult--source-recent-file
+;       consult--source-project-recent-file
+;`       :preview-key (kbd "M-."))
+
+      ;; Optionally configure the narrowing key.
+      ;; Both < and C-+ work reasonably well.
+      (setq consult-narrow-key "<") ;; (kbd "C-+")
+
+      ;; Optionally make narrowing help available in the minibuffer.
+      ;; You may want to use `embark-prefix-help-command' or which-key instead.
+      ;; (define-key consult-narrow-map (vconcat consult-narrow-key "?") #'consult-narrow-help)
+
+      ;; By default `consult-project-function' uses `project-root' from project.el.
+      ;; Optionally configure a different project root function.
+      ;; There are multiple reasonable alternatives to chose from.
+      ;;;; 1. project.el (the default)
+      ;; (setq consult-project-function #'consult--default-project--function)
+      ;;;; 2. projectile.el (projectile-project-root)
+      ;; (autoload 'projectile-project-root "projectile")
+      ;; (setq consult-project-function (lambda (_) (projectile-project-root)))
+      ;;;; 3. vc.el (vc-root-dir)
+      ;; (setq consult-project-function (lambda (_) (vc-root-dir)))
+      ;;;; 4. locate-dominating-file
+      ;; (setq consult-project-function (lambda (_) (locate-dominating-file "." ".git")))
+    )
+
+
+
+  (message "Enable consult-projectile")
+  (use-package consult-projectile
+  :straight (consult-projectile :type git :host gitlab :repo "OlMon/consult-projectile" :branch "master"))
+
+    (global-set-key (kbd "C-c r p") 'consult-projectile)
+
+
+
+  (message "Loading consult-org-roam")
+  (use-package consult-org-roam
+
+   :init
+   (require 'consult-org-roam)
+   ;; Activate the minor-mode
+   (consult-org-roam-mode 1)
+   :custom
+   (consult-org-roam-grep-func #'consult-ripgrep)
+   :config
+   ;; Eventually suppress previewing for certain functions
+   (consult-customize
+    consult-org-roam-forward-links
+    :preview-key (kbd "M-."))
+   :bind
+   ("C-c n e" . consult-org-roam-file-find)
+   ("C-c n b" . consult-org-roam-backlinks)
+   ("C-c n r" . consult-org-roam-search))
+#+end_src
+
+
+* embark collecto
+
+#+begin_src elisp
+  (message "loading Embark")
+    (use-package embark
+    :demand
+    :bind
+    (("C-c d ." . embark-act)         ;; pick some comfortable binding
+     ("C-;" . embark-dwim)        ;; good alternative: M-.
+     ("C-h B" . embark-bindings)
+
+     (:map minibuffer-local-map
+              ("M-o" . embark-act)
+              ("C-o" . embark-collect))
+     ) ;; alternative for `describe-bindings'
+
+    :init
+
+    ;; Optionally replace the key help with a completing-read interface
+    (setq prefix-help-command #'embark-prefix-help-command)
+
+    ;; Show the Embark target at point via Eldoc.  You may adjust the Eldoc
+    ;; strategy, if you want to see the documentation from multiple providers.
+    ;; (add-hook 'eldoc-documentation-functions #'embark-eldoc-first-target)
+    ;; (setq eldoc-documentation-strategy #'eldoc-documentation-compose-eagerly)
+
+    :config
+
+    ;; Hide the mode line of the Embark live/completions buffers
+    (add-to-list 'display-buffer-alist
+                 '("\\`\\*Embark Collect \\(Live\\|Completions\\)\\*"
+                   nil
+                   (window-parameters (mode-line-format . none)))))
+
+  (message "Loading embark-consult")
+
+  ;; Consult users will also want the embark-consult package.
+  (use-package embark-consult
+     ; only need to install it, embark loads it after consult if found
+    :hook
+    (embark-collect-mode . consult-preview-at-point-mode))
+
+#+end_src
+
+#+RESULTS:
+: #s(hash-table size 65 test eql rehash-size 1.5 rehash-threshold 0.8125 data (:use-package (26408 14712 680892 0) :init (26408 14712 680889 0) :init-secs (0 0 21 0) :use-package-secs (0 0 1804 0)))
+
+
+* syncthing conflicts
+
+#+begin_src elisp
+    (use-package emacs-conflict
+      :straight (emacs-conflict :type git :host github :repo "ibizaman/emacs-conflict" :branch "master"))
+
+
+    (global-set-key (kbd "C-c r r") 'emacs-conflict-resolve-conflicts)
+  (global-set-key (kbd "C-c r d") 'emacs-conflict-resolve-conflict-dired)
+
+
+  (defun ediff-copy-both-to-C ()
+  (interactive)
+  (ediff-copy-diff ediff-current-difference nil 'C nil
+                   (concat
+                    (ediff-get-region-contents ediff-current-difference 'A ediff-control-buffer)
+                    (ediff-get-region-contents ediff-current-difference 'B ediff-control-buffer))))
+(defun add-d-to-ediff-mode-map () (define-key ediff-mode-map "d" 'ediff-copy-both-to-C))
+(add-hook 'ediff-keymap-setup-hook 'add-d-to-ediff-mode-map)
+#+end_src
+
+
+
+* nursery
+
+#+begin_src elisp
+    (add-to-list 'load-path "~/workspace/github/nursery/lisp")
+
+
+    (use-package org-drill)
+     (require 'org-roam-dblocks)
+     (require 'org-roam-links)
+
+
+  ;;  (use-package org-roam-review :straight (org-roam-review :type git :local-repo "~/workspace/emacs-nursery" :no-build t :no-install t)
+  ;;  :commands (org-roam-review
+  ;;             org-roam-review-list-by-maturity
+  ;;             org-roam-review-list-recently-added)
+
+    ;; ;; Optional - tag all newly-created notes as seedlings.
+    ;; :hook (org-roam-capture-new-node . org-roam-review-set-seedling)
+
+    ;; ;; Optional - keybindings for applying Evergreen note properties.
+    ;; :general
+    ;; (:keymaps 'org-mode-map
+    ;; "C-c r r" '(org-roam-review-accept :wk "accept")
+    ;; "C-c r u" '(org-roam-review-bury :wk "bury")
+    ;; "C-c r x" '(org-roam-review-set-excluded :wk "set excluded")
+    ;; "C-c r b" '(org-roam-review-set-budding :wk "set budding")
+    ;; "C-c r s" '(org-roam-review-set-seedling :wk "set seedling")
+    ;; "C-c r e" '(org-roam-review-set-evergreen :wk "set evergreen"))
+
+    ;; ;; Optional - bindings for evil-mode compatability.
+    ;; :general
+    ;; (:states '(normal) :keymaps 'org-roam-review-mode-map
+    ;; "TAB" 'magit-section-cycle
+    ;; "g r" 'org-roam-review-refresh)
+    ;;)
+#+end_src
+
+
+
+* vt-repos
+:PROPERTIES:
+:org-gcal-managed: org
+:END:
+
+#+begin_src elisp
+  (defun dm/get-fav-urls ()
+    "Get Urls from ~/.urls"
+    (let ((choices
+           (split-string
+            (shell-command-to-string "cat ~/.urls")
+            )))
+      (completing-read "Urls: " choices)))
+
+  (defun dm/open-fav-urls ()
+    "Launches a browser with the url suppplied"
+    (interactive)
+    (let ((url (dm/get-fav-url-2)))
+      (shell-command
+       (format "open '%s'" url))
+      ))
+
+  (defun dm/popup-url-selector ()
+    (get-buffer-create "URLS")
+    (switch-to-buffer "URLS")
+    (org-set-frame-title "URLS")
+    (x-focus-frame nil)
+    (vertico-posframe-mode -1)
+    (unwind-protect
+        (dm/open-fav-urls)
+      (vertico-posframe-mode 1))
+    (delete-frame))
+
+
+  (defun dm/popup-org-roam-node-find ()
+    (get-buffer-create "URLS")
+    (switch-to-buffer "URLS")
+    (org-set-frame-title "URLS")
+    (x-focus-frame nil)
+    (org-roam-node-find)
+    (current-buffer-journal 1)
+    )
+
+    (defun dm/popup-daily-log ()
+    (get-buffer-create "URLS")
+    (switch-to-buffer "URLS")
+    (org-set-frame-title "URLS")
+    (x-focus-frame nil)
+    (org-roam-dailies-goto-today)
+    (org-insert-new-date-in-log)
+    (current-buffer-journal 1)
+    )
+
+
+
+
+#+end_src
+
+
+
+Preserve desktop
+
+#+begin_src emacs-lisp
+  ;; Disabled - was prompting to save on exit
+  ;; (setq desktop-lazy-idle-delay 25)
+  ;; (setq desktop-restore-eager 5)
+  ;; (desktop-save-mode 1)
+  ;; (setq desktop-path (list user-emacs-directory))
+  ;;(setq desktop-path `(,(concat user-emacs-directory ".cache/")))
+#+end_src
+
+
+* Yasnipet
+
+Snippets library.
+
+~M-x yas-new-snippet~ to create a new snippet.
+
+Then type the short form (eg ~inv~) and hit ~tab~ to expand.
+
+#+begin_src elisp
+    (use-package yasnippet
+
+       :init
+       (yas-global-mode 1)
+       :config
+       (add-to-list 'yas-snippet-dirs (locate-user-emacs-file "snippets")))
+#+end_src
+
+
+
+
+* symbol-overlay
+
+[[https://github.com/wolray/symbol-overlay][symbol-overlay]] highlights symbols under point and jumps between them.
+
+~M-x symbol-overlay-remove-all~ to clean up.
+
+
+#+begin_src elisp
+    (use-package symbol-overlay
+      )
+
+    ;;(define-key evil-motion-state-map (kbd "*") #'(lambda () ((symbol-overlay-put) (symbol-overlay-jump-next))))
+
+#+end_src
+
+
+
+
+* copilot
+
+#+begin_src elisp
+  (use-package copilot
+    :straight (:host github :repo "zerolfx/copilot.el" :files ("dist" "*.el"))
+    :config
+    (add-hook 'prog-mode-hook 'copilot-mode)
+    (define-key copilot-completion-map (kbd "<tab>") 'copilot-accept-completion)
+    (define-key copilot-completion-map (kbd "TAB") 'copilot-accept-completion)
+    )
+#+end_src
+
+
+
+
+
+* copilot-chat
+
+#+begin_src elisp
+
+  (use-package shell-maker :ensure t)
+  (use-package copilot-chat
+  :straight (:host github :repo "chep/copilot-chat.el" :files ("*.el"))
+  :after (org shell-maker))
+#+end_src
+
+* enable media wiki export
+
+#+begin_src
+  ;;(require 'ox-mediawiki)
+#+end_src
+
+* export only matched tree in org-mode from [[https://emacs.stackexchange.com/questions/42084/in-org-mode-how-to-export-sparse-tree-in-buffer-without-unmatched-top-level-hea#][here]].
+
+#+begin_src elisp
+ ;;(require 'org)
+
+;; (defun my-org-export-only-occur (tree _back-end info)
+;;   "Export TREE only headings with org-occur overlays if there are any.
+;; Don't filter out anything if there are no org-occur overlays.
+;; This is a function for `org-export-filter-parse-tree-functions'.
+;; INFO is the plist of export infos.
+;; We are using :input-buffer of INFO."
+;;   (let ((input-buffer (plist-get info :input-buffer)))
+;;     (if (and input-buffer
+;;          (with-current-buffer input-buffer
+;;            org-occur-highlights))
+;;     (org-element-map
+;;         tree 'headline
+;;       (lambda (el)
+;;         (and (org-element-map
+;;              el 'headline
+;;            (lambda (hl)
+;;              (cl-member-if
+;;               (lambda (ol)
+;;             (eq (overlay-get ol 'org-type) 'org-occur))
+;;               (with-current-buffer input-buffer
+;;             (overlays-at (org-element-property :begin hl)))))
+;;            nil t)
+;;          el))
+;;       nil nil 'headline)
+;;       tree)))
+
+;; (cl-pushnew #'my-org-export-only-occur org-export-filter-parse-tree-functions)
+
+#+end_src
+
+
+* blamer
+
+
+[[https://github.com/Artawower/blamer.el][Blamer]] shows inline git commit messages, like vscode.
+
+#+begin_src elisp
+  (message "Loading blamer")
+  (use-package blamer
+    :ensure t
+    :bind (("s-i" . blamer-show-commit-info)
+           ("C-c i" . blamer-show-posframe-commit-info))
+    :defer 20
+    :custom
+    (blamer-idle-time 0.3)
+    (blamer-min-offset 70)
+    :custom-face
+    (blamer-face ((t :foreground "#7a88cf"
+                     :background nil
+                     :height 80
+                     :italic nil)))
+    :config
+    ;;(global-blamer-mode 1)
+    )
+
+
+
+  (defun dm/turn-on-blamer-mode ()
+    (interactive)
+    "Turn on blamer for everything other than org files."
+    (when (and buffer-file-name
+               (not (string-suffix-p ".org" buffer-file-name)))
+      (blamer-mode 1)))
+
+  (add-hook 'find-file-hook #'dm/turn-on-blamer-mode)
+
+
+#+end_src
+
+
+
+
+* gptel
+
+- =M-x mcp-hub= to see all currently running mcp servers
+#+begin_src elisp
+    (defun dm/gptel-send-universal-prefix ()
+      "Invoke gptel-send with a universal prefix. This function is to be used in :bind"
+      (interactive)
+      (gptel-send '(4)))
+
+    (use-package gptel
+      :straight (:type git :host github :repo "karthink/gptel" )
+      :config
+      (require 'gptel-context)
+      :bind ("C-c d g" . dm/gptel-send-universal-prefix))
+
+
+    (setq gptel-backend (gptel-make-anthropic "Claude"
+      :stream t
+      :key (getenv "CLAUDE_TOKEN")))
+
+
+    (setq gptel-model 'claude-sonnet-4-20250514)
+
+    ;; (setq gptel-backend "Claude")
+    ;; (setq gptel-backend     (gptel-make-anthropic "Claude"
+    ;;   :stream t
+    ;;   :key (getenv "CLAUDE_TOKEN")))
+
+
+
+
+
+    (use-package mcp
+      :ensure t
+      :after gptel
+      :config
+      (require 'mcp-hub)
+
+    (setq mcp-hub-servers
+          `(
+  ;;          ("mcp-eng" . (:command "/Users/dmitrymarkushevich/bin/eng-mcp.sh"))
+  ;;          ("atlassian" . (:command "/Users/dmitrymarkushevich/bin/atlassian.sh" :args ())) ;
+  ;;          ("context7" . (:command "npx" :args ("-y" "@upstash/context7-mcp@latest")))
+  ;;          ("chroma" . (:command "uvx" :args ("chroma-mcp" "--client-type" "persistent" "--data-dir" "/Users/dmitrymarkushevich/chromadb")))
+  ;;          ("basic-memory" . (:command "uvx" :args ("basic-memory" "mcp")))
+  ;;           ("github" :url "https://api.githubcopilot.com/mcp/" :token ,(lambda () (getenv "GITHUB_TOKEN")))
+            ))
+
+
+      :hook (after-init . mcp-hub-start-all-server))
+
+    (use-package dot-env
+      :ensure t)
+
+
+    ;; (setq dot-env-filepath "/Users/dmitrymarkushevich/workspace/eng-mcp-server/.env")
+    ;; (dot-env-config)
+    ;; (dot-env-get 'JIRA_HOST)
+
+
+
+
+    (require 'gptel-integrations)
+
+#+end_src
+
+
+* jira
+
+To get JQL from a board:
+1. Click on the '...'
+2. Select configure board
+3. Board filter (JQL) should be in the general tab
+
+#+begin_src elisp
+
+  (use-package org-jira)
+
+
+
+  (setq org-jira-custom-jqls
+        '(
+          (:jql "(
+      (
+          (project in (\"Customer Acquisition Consumer\", \"Comms Platform\") AND \"Team[Team]\" in (MEX, 0b76287e-7b0f-40d4-ab51-567e658d6502))
+          OR (project = MEX AND labels in (CAC))
+          OR (project = \"Customer Acquisition Consumer\" and labels in (CAC))
+          OR (project = \"Comms Platform\" and labels in (CAC))
+          OR (project = WORK and labels in (CAC))
+      )
+      AND status not in (Done, Rejected)
+      AND assignee = currentUser()
+  ) ORDER BY Rank ASC"
+
+
+
+                :filename "mex-current-sprint")
+
+
+          (:jql "parent = MEX-14106 ORDER BY created DESC" :filename "chimera")
+          (:jql "assignee = currentUser()" :filename "assigned-to-me")
+          (:jql "reporter in (currentUser()) order by created DESC" :filename "created-by-me")
+
+
+
+          ))
+
+#+end_src
+
+
+
+
+* FIN
+
+#+begin_src emacs-lisp
+
+  (toggle-frame-maximized)
+#+end_src
+
+* org-modern-indent slow
+
+https://github.com/jdtsmith/org-modern-indent
+
+#+begin_src elisp
+(use-package org-modern-indent
+ :straight (org-modern-indent :type git :host github :repo "jdtsmith/org-modern-indent")
+ :config ; add late to hook
+ (add-hook 'org-mode-hook #'org-modern-indent-mode 90))
+#+end_src
+
+
+* org-ql
+
+Patched org-ql. Insert a link to the issue that was patched.
+
+in .emacs.
+
+#+begin_src elisp
+  (use-package org-ql)
+  #+end_src
+
+
+* mermaid
+#+begin_src elisp
+  (use-package mermaid-mode)
+#+end_src
+
+
+* Helpful
+
+Expanded information about keys, functions (like =describe-function=, but better).
+
+TODO: Figure out how to bind this properly.
+
+#+begin_src elisp
+  (use-package helpful
+    :commands (helpful-callable helpful-variable helpful-command helpful-key))
+
+#+end_src
+
+
+
+
+
+* hl-diff
+
+#+begin_quote
+diff-hl-mode highlights uncommitted changes on the left side of the window (area also known as the "gutter"), allows you to jump between and revert them selectively.
+#+end_quote
+
+
+#+begin_src elisp
+    (use-package diff-hl
+    :init (global-diff-hl-mode))
+#+end_src
+* Finish
+
+#+begin_src elisp
+
+  (menu-bar-mode t) ;; necessary for spaces focusing properly.
+  ;; (push "/opt/homebrew/Cellar/emacs-mac/emacs-28.1-mac-9.0/share/emacs/28.1/lisp/org" load-path)
+  (setq org-fold-core-style 'text-properties)    ;; org failing to org-cycle with org-mode 6.5.1. This is the work around.
+  (message "Done loading.")
+
+#+end_src
+
+
+* [2023-06-18 Sun]
+#+begin_src elisp
+  (defun dm/get-clipboard-contents ()
+    (current-kill 0))
+
+
+
+
+#+end_src
+
+
+
+* [2023-08-14 Mon] emacs refactor
+
+Refactoring support via =M-x emr-show-refactor-menu=
+
+
+#+begin_src elisp
+;;  (use-package emacs-refactor)
+
+#+end_src
+
+* prettier
+#+begin_src elisp
+  (straight-use-package 'apheleia)
+
+
+#+end_src
+
+
+* js?
+(add-hook 'js-mode '(flymake-eslint-enable))
+
+
+
+* ediff from prot: https://www.youtube.com/watch?v=pSvsAutseO0
+
+#+begin_src elisp
+  (setq ediff-keep-variants nil)
+  (setq ediff-make-buffers-readonly-at-startup nil)
+  (setq ediff-merge-revisions-with-ancestor t)
+  (setq ediff-show-clashes-only t)
+
+  (setq ediff-split-window-function 'split-window-horizontally)
+  (setq ediff-window-setup-function 'ediff-setup-windows-plain)
+#+end_src
+
+
+
+* [2024-03-18 Mon] kubel
+
+#+begin_src elisp
+
+  ;; (use-package vterm)
+
+  ;; (use-package kubel
+  ;; :after (vterm)
+  ;; :config (kubel-vterm-setup))
+
+
+
+#+end_src
+
+
+* [2024-07-16 Tue] emacs-everywhere
+
+
+#+begin_src elisp
+  (message "[d] emacs-everywhere")
+
+    (use-package emacs-everywhere)
+    (defun dm/log-to-current-daily ()
+    "Dump the current buffer to a daily log file."
+    (let ((emacs-everywhere-contents   (buffer-substring-no-properties (point-min) (point-max))))
+      (with-temp-buffer
+        (org-roam-dailies-find-today)
+        (org-insert-new-date-in-log)
+        (insert emacs-everywhere-contents))))
+
+  (add-hook 'emacs-everywhere-final-hooks 'dm/log-to-current-daily)
+  (setq emacs-everywhere-frame-name-format "URLS")
+
+
+
+#+end_src
+
+
+* [2024-07-16 Tue] tabbar
+#+begin_src elisp
+  ;; (setq tab-bar-show 1)                      ;; hide bar if <= 1 tabs open
+  ;; (setq tab-bar-close-button-show t)       ;; hide tab close / x button
+  ;; (setq tab-bar-new-tab-choice #'org-roam-goto-today);; buffer to show in new tabs
+  ;; (setq tab-bar-tab-hints t)                 ;; show tab numbers
+  ;; (setq tab-bar-format '(tab-bar-format-tabs tab-bar-separator))
+  ;; ;; elements to include in bar
+
+
+  ;; (tab-bar-mode 0)                           ;; enable tab bar
+
+  ;; (global-set-key (kbd "H-{") 'tab-bar-switch-to-prev-tab)
+  ;; (global-set-key (kbd "H-}") 'tab-bar-switch-to-next-tab)
+  ;; (global-set-key (kbd "H-t") 'tab-bar-new-tab)
+  ;; (global-set-key (kbd "H-w") 'tab-bar-close-tab)
+
+
+#+end_src
+
+* zettledesk
+
+#+begin_src elisp
+  (use-package zetteldesk
+    :after major-mode-hyra
+    :ensure t
+    :straight (zetteldesk
+               :type git :host github
+               :repo "Vidianos-Giannitsis/zetteldesk.el")
+    :config
+    (zetteldesk-mode 1)
+    (setq zetteldesk-kb-hydra-prefix (kbd "C-c x"))
+    (add-to-list 'load-path "~/.emacs.d/straight/repos/zetteldesk.el")
+    (require 'zetteldesk-kb)
+    )
+
+
+  (use-package major-mode-hydra
+    :ensure t
+    :bind
+    ("M-SPC" . major-mode-hydra))
+
+
+
+  (use-package vulpea
+  :ensure t
+  ;; hook into org-roam-db-autosync-mode you wish to enable
+  ;; persistence of meta values (see respective section in README to
+  ;; find out what meta means)
+  :hook ((org-roam-db-autosync-mode . vulpea-db-autosync-enable)))
+#+end_src
+
+* org-sie
+
+#+begin_src elisp
+  (use-package org-sie
+    :demand t
+    :straight (:repo "dmitrym0/org-sie"
+                     :host github
+                     :type git))
+#+end_src
+
+
+
+
+* org-modern
+
+#+begin_src elisp
+      (use-package org-modern :demand t
+        :config
+        (global-org-modern-mode))
+#+end_src
+
+#+begin_src elisp
+  (use-package citeproc)
+#+end_src
+
+#+begin_src elisp
+
+  (use-package citar
+    :custom
+    (citar-bibliography '("~/org-roam/bibliography/zotero.bib")))
+  (use-package citar-org-roam)
+
+#+end_src
+
+
+#+begin_src elisp
+  (defun dm/config ()
+    "Open up dmitry's config file"
+    (interactive)
+    (find-file "~/dotfiles/config.org"))
+
+
+
+#+end_src
+
+
+
+* om-dash
+
+org-mode dashboards
+
+#+begin_src elisp
+  (use-package om-dash  :init (org-pomodoro-third-time-mode +1)
+    :straight (:repo "gavv/om-dash"
+                     :host github
+                     :type git))
+#+end_src
+
+
+
+
+
+* git-link
+
+#+begin_src elisp
+  (message "[d] git-link")
+
+    (defun git-link-diffrent-branch (branch)
+    "Invoke `git-link', but with the `branch' name set to a different
+  branch than the one you're currently working on."
+    (interactive "P")
+    (let* ((default-remote-branch-name "main")
+           (git-link-current-branch-setting git-link-default-branch)
+           (git-link-default-branch (if branch
+                                        (completing-read
+                                         (format "Instead of '%s' branch replace with branch: " (git-link--branch))
+                                         (magit-list-branch-names))
+                                      default-remote-branch-name)))
+      (setq current-prefix-arg nil)
+      (call-interactively 'git-link)
+      (setq git-link-default-branch git-link-current-branch-setting)))
+
+
+#+end_src
+
+
+
+* notes
+
+=global-linum-mode= is bad apparently. Makes everything slow.
+
+
+* midnight mode
+
+Midnight mode cleans up unused buffers. [[https://www.gnu.org/software/emacs/manual/html_mono/emacs.html#Kill-Buffer][manual]].
+
+#+begin_src elisp
+
+  (message "[d] enable midnight mode")
+    ;; Midnight mode configuration
+  (require 'midnight)
+
+  ;; Automatically clean buffers that haven't been used in the last 3 days
+  (setq clean-buffer-list-delay-general (* 3 24 60 60)) ; 3 days in seconds
+
+  ;; Specify buffers to ignore during cleanup
+  (setq clean-buffer-list-kill-never-buffer-names
+        '("*scratch*" "*Messages*"))
+
+  ;; Enable Midnight mode
+ (midnight-mode t)
+
+
+#+end_src
+
+
+
+* Timestamp *messages*
+
+From [[https://emacs.stackexchange.com/a/33523/22240][SO]]
+
+#+begin_src elisp
+  (message "[d] timestamp message buffer")
+
+    (defun sh/current-time-microseconds ()
+    "Return the current time formatted to include microseconds."
+    (let* ((nowtime (current-time))
+           (now-ms (nth 2 nowtime)))
+      (concat (format-time-string "[%Y-%m-%dT%T" nowtime) (format ".%d]" now-ms))))
+
+  (defun sh/ad-timestamp-message (FORMAT-STRING &rest args)
+    "Advice to run before `message' that prepends a timestamp to each message.
+
+  Activate this advice with:
+  (advice-add 'message :before 'sh/ad-timestamp-message)"
+    (unless (or (string-equal FORMAT-STRING "%s%s")
+                ;; Don't recurse if we're already in *Messages* buffer
+                (eq (current-buffer) (get-buffer "*Messages*"))
+                ;; Filter out noisy scroll messages
+                (string-match-p "^\\(End\\|Beginning\\) of buffer" (or FORMAT-STRING "")))
+      (let ((deactivate-mark nil)
+            (inhibit-read-only t))
+        (with-current-buffer "*Messages*"
+          ;; Save point position so we don't jump user's cursor
+          (save-excursion
+            (goto-char (point-max))
+            (unless (bolp)
+              (newline))
+            (insert (sh/current-time-microseconds) " "))))))
+
+  (advice-add 'message :before 'sh/ad-timestamp-message)
+
+#+end_src
+
+
+
+
+* pretty vertico
+
+#+begin_src elisp
+  ;; (straight-use-package
+  ;;  '(nova :type git :host github :repo "thisisran/nova"))
+
+  ;; (require 'nova-vertico)
+
+  ;; (nova-vertico-mode 1)
+
+
+
+#+end_src
+
+* Auto dim
+
+
+#+begin_src elisp
+
+  ;; (use-package auto-dim-other-buffers :ensure t)
+
+#+end_src
+
+
+#+begin_src elisp
+  (message "Github markdown export")
+  (use-package ox-gfm :defer 5 :init (require 'ox-gfm))
+
+#+end_src
+
+
+
+* super links
+
+#+begin_src elisp
+  (message "Super links")
+  (use-package org-super-links
+  :straight (org-super-links :type git :host github :repo "toshism/org-super-links" :branch "develop")
+  :bind (("C-c s s" . org-super-links-link)
+         ("C-c s l" . org-super-links-store-link)
+         ("C-c s C-l" . org-super-links-insert-link)))
+
+#+end_src
+
+
+
+* aideremacs
+
+
+#+begin_src elisp
+  ;; (message "aider")
+  ;; (use-package aidermacs
+  ;;   :bind (("C-c d a" . aidermacs-transient-menu))
+  ;;   :config
+  ;;   (setenv "ANTHROPIC_API_KEY" (getenv "CLAUDE_TOKEN"))
+  ;;   :custom
+  ;;   (aidermacs-use-architect-mode t)
+  ;;   (aidermacs-default-model "sonnet"))
+
+#+end_src
+
+
+
+* Smarter keyboard quit
+
+
+#+begin_src elisp
+
+    (defun er-keyboard-quit ()
+    "Smater version of the built-in `keyboard-quit'.
+
+  The generic `keyboard-quit' does not do the expected thing when
+  the minibuffer is open.  Whereas we want it to close the
+  minibuffer, even without explicitly focusing it."
+    (interactive)
+    (if (active-minibuffer-window)
+        (if (minibufferp)
+            (minibuffer-keyboard-quit)
+          (abort-recursive-edit))
+      (keyboard-quit)))
+
+
+  (global-set-key [remap keyboard-quit] #'er-keyboard-quit)
+
+
+#+end_src
+
+
+
+* Go Mode
+
+#+begin_src elisp
+
+  (use-package go-mode)
+
+#+end_src
+
+
+
+* org-workbench
+
+Zettlecasten assistance
+
+#+begin_src elisp
+  (use-package org-workbench
+    :straight (:host github :repo "yibie/org-workbench")
+    :config
+    (org-workbench-setup))
+
+#+end_src
+
+
+
+
+* randoms
+
+from here: https://emacsredux.com/blog/2026/04/07/stealing-from-the-best-emacs-configs/
+
+#+begin_src elisp
+
+  (setq redisplay-skip-fontification-on-input t)
+
+
+#+end_src
+* FIN
+
+#+begin_src elisp
+  (benchmark-init/deactivate)
+  (benchmark-init/show-durations-tabulated)
+  (with-current-buffer "*Benchmark Init Results Tabulated*"
+    (message "%s" (buffer-string)))
+
+
+  (benchmark-init/show-durations-tree)
+    (with-current-buffer "*Benchmark Init Results Tree*"
+    (message "%s" (buffer-string)))
+
+  (setq gc-cons-threshold (* 100 1024 1024))
+
+  (message "------- ✅DONE LOADING ------")
+#+end_src
